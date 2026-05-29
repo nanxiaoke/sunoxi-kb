@@ -1,0 +1,25 @@
+# 微信公众号文章测试集
+# 这些URL用于测试微信公众号抓取器的有效性
+# 注意：部分URL可能因时间、权限或反爬机制而失效
+
+# 技术类公众号示例文章（需要寻找实际有效的URL）
+# 注意：以下URL可能需要替换为实际有效的文章
+
+# 示例1：阮一峰的网络日志（技术博客，通过微信公众号分享）
+# https://mp.weixin.qq.com/s?__biz=MzA4NDk5OTgzMg==&mid=2650484340&idx=1&sn=xxxxx
+
+# 示例2：Python开发者（技术公众号）
+# https://mp.weixin.qq.com/s?__biz=MzU4Mjg0NDE3Mw==&mid=224748xxxx&idx=1&sn=xxxxx
+
+# 测试用的基础URL（需要验证有效性）
+https://mp.weixin.qq.com/s/Y_uRMYBmdLWUPnz_ac7jW
+
+# 由于难以找到长期有效的公开微信公众号文章URL，
+# 建议实际使用时通过以下方式获取测试URL：
+# 1. 在微信中打开技术公众号文章
+# 2. 点击分享 → 复制链接
+# 3. 将链接添加到此处
+
+# 备用测试方案：使用已知的公开文章
+# 例如：微信公众号开发文档、公告等公开内容
+# https://mp.weixin.qq.com/s/xxxx (需替换为实际URL)

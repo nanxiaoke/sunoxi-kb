@@ -1,0 +1,8 @@
+.git
+__pycache__
+*.pyc
+logs
+.trash
+backups
+*.tar.gz
+.env

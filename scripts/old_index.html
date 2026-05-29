@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karpathy 知识库</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2a2e3f;
+    --text: #e1e4ed;
+    --text2: #8b8fa3;
+    --accent: #6c8cff;
+    --accent2: #9b6cff;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --radius: 10px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  .layout { display:flex; height:100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width:240px; background:var(--surface); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; flex-shrink:0;
+  }
+  .sidebar-header { padding:20px; border-bottom:1px solid var(--border); }
+  .sidebar-header h1 { font-size:18px; font-weight:700; }
+  .sidebar-header .sub { font-size:12px; color:var(--text2); margin-top:4px; }
+  .sidebar-nav { flex:1; overflow-y:auto; padding:12px; }
+  .sidebar-nav a {
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-radius:8px; color:var(--text2); text-decoration:none; font-size:14px;
+    margin-bottom:2px; transition:all .15s; cursor:pointer;
+  }
+  .sidebar-nav a:hover, .sidebar-nav a.active { background:var(--surface2); color:var(--text); }
+  .sidebar-nav a .icon { font-size:16px; width:20px; text-align:center; }
+  .sidebar-stats { padding:16px; border-top:1px solid var(--border); font-size:12px; color:var(--text2); }
+
+  /* Main content */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .main-header {
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:16px; background:var(--surface);
+  }
+  .main-header h2 { font-size:16px; flex:1; }
+  .main-body { flex:1; overflow-y:auto; padding:24px; }
+
+  /* Panels */
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  /* Search bar */
+  .search-bar { display:flex; gap:8px; margin-bottom:20px; }
+  .search-bar input {
+    flex:1; padding:10px 16px; border-radius:var(--radius); border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:14px; outline:none;
+  }
+  .search-bar input:focus { border-color:var(--accent); }
+  .mode-btn {
+    padding:8px 14px; border-radius:var(--radius); border:1px solid var(--border);
+    background:var(--surface); color:var(--text2); font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .mode-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .mode-btn:hover:not(.active) { border-color:var(--accent); }
+
+  /* Document list */
+  .doc-list { display:flex; flex-direction:column; gap:8px; }
+  .doc-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px; display:flex; align-items:center; gap:12px;
+  }
+  .doc-card:hover { border-color:var(--accent); }
+  .doc-card.selected { border-color:var(--accent); background:var(--surface2); }
+  .doc-icon { font-size:20px; }
+  .doc-info { flex:1; min-width:0; }
+  .doc-info .name { font-size:14px; font-weight:600; }
+  .doc-info .meta { font-size:12px; color:var(--text2); margin-top:2px; }
+  .doc-info .preview { font-size:12px; color:var(--text2); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .score { font-size:11px; padding:2px 8px; border-radius:12px; background:var(--surface2); }
+  .score.good { color:var(--green); }
+  .score.medium { color:var(--yellow); }
+
+  /* Buttons */
+  .btn {
+    padding:8px 16px; border-radius:8px; border:none; font-size:13px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; transition:all .15s;
+  }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { opacity:.9; }
+  .btn-danger { background:var(--red); color:#fff; }
+  .btn-danger:hover { opacity:.9; }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--text); }
+  .btn-sm { padding:4px 10px; font-size:12px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border:2px dashed var(--border); border-radius:var(--radius); padding:40px;
+    text-align:center; cursor:pointer; transition:all .2s; margin-bottom:16px;
+  }
+  .upload-zone:hover, .upload-zone.dragover { border-color:var(--accent); background:rgba(108,140,255,.05); }
+  .upload-zone .icon { font-size:36px; margin-bottom:8px; }
+  .upload-zone p { color:var(--text2); font-size:14px; }
+
+  /* Status toast */
+  .toast {
+    position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:var(--radius);
+    font-size:14px; z-index:100; display:none; max-width:360px;
+  }
+  .toast.success { background:#064e3b; color:var(--green); display:block; }
+  .toast.error { background:#4c0519; color:var(--red); display:block; }
+
+  /* Doc viewer modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    width:90%; max-width:850px; max-height:85vh; display:flex; flex-direction:column;
+  }
+  .modal-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .modal-header h3 { flex:1; font-size:16px; min-width:120px; }
+  .modal-close { background:none; border:none; color:var(--text2); font-size:20px; cursor:pointer; }
+  .modal-body { flex:1; overflow-y:auto; padding:20px; font-size:14px; line-height:1.7; }
+  .modal-body pre { background:var(--bg); padding:12px; border-radius:8px; overflow-x:auto; }
+  .modal-body code { background:var(--bg); padding:2px 6px; border-radius:4px; font-size:13px; }
+  .modal-body textarea {
+    width:100%; min-height:400px; background:var(--bg); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:16px; font-family:monospace; font-size:13px; resize:vertical; line-height:1.6;
+  }
+  .rename-row { display:flex; gap:8px; align-items:center; margin-top:8px; padding:8px 12px; background:var(--bg); border-radius:8px; }
+  .rename-row input, .rename-row select { padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; }
+  .batch-bar { display:none; padding:8px 16px; background:var(--accent); color:#fff; border-radius:8px; margin-bottom:12px; align-items:center; gap:12px; }
+  .batch-bar.show { display:flex; }
+
+  /* Graph */
+  #graph-container { width:100%; height:500px; background:var(--surface); border-radius:var(--radius); }
+  .graph-node { cursor:pointer; }
+  .graph-node text { fill:var(--text); font-size:10px; }
+  .graph-link { stroke:var(--border); stroke-opacity:.6; }
+
+  /* Category filter */
+  .cat-tags { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .cat-tag {
+    padding:4px 12px; border-radius:16px; border:1px solid var(--border); font-size:12px;
+    color:var(--text2); cursor:pointer; white-space:nowrap;
+  }
+  .cat-tag.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  @media (max-width:768px) {
+    .layout { flex-direction: column-reverse; }
+    .sidebar { width: 100%; height: 60px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); }
+    .sidebar-header { display: none; }
+    .sidebar-nav { display: flex; flex-direction: row; width: 100%; padding: 0; margin: 0; }
+    .sidebar-nav a { flex: 1; flex-direction: column; justify-content: center; align-items: center; padding: 6px 0; gap: 4px; margin-bottom: 0; }
+    .sidebar-nav a span { font-size: 11px; }
+    .sidebar-nav a span.icon { font-size: 20px; }
+    .sidebar-stats { display: none; }
+    .main { height: calc(100vh - 60px); }
+    .main-header h2 { font-size: 16px; }
+    .search-bar { flex-wrap: wrap; }
+    .search-bar input { flex: 1 1 100%; }
+    .mode-btn { flex: 1; padding: 8px 4px; font-size: 12px; }
+    .btn-primary { flex: 1 1 100%; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>📚 Karpathy KB</h1>
+      <div class="sub">本地知识库</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a data-panel="search" class="active" onclick="switchPanel('search')">
+        <span class="icon">🔍</span> <span>搜索</span>
+      </a>
+      <a data-panel="docs" onclick="switchPanel('docs')">
+        <span class="icon">📄</span> <span>文档管理</span>
+      </a>
+      <a data-panel="upload" onclick="switchPanel('upload')">
+        <span class="icon">📤</span> <span>上传文档</span>
+      </a>
+      <a data-panel="graph" onclick="switchPanel('graph')">
+        <span class="icon">🕸️</span> <span>知识图谱</span>
+      </a>
+    </nav>
+    <div class="sidebar-stats" id="sidebar-stats">加载中…</div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="main-header">
+      <h2 id="panel-title">🔍 搜索</h2>
+    </div>
+    <div class="main-body">
+      <!-- Search panel -->
+      <div id="panel-search" class="panel active">
+        <div class="search-bar">
+          <input id="search-input" type="text" placeholder="搜索知识库…" onkeydown="if(event.key==='Enter')doSearch()">
+          <button class="mode-btn active" data-mode="hybrid" onclick="setSearchMode('hybrid')">🔀 混合</button>
+          <button class="mode-btn" data-mode="keyword" onclick="setSearchMode('keyword')">🔍 关键词</button>
+          <button class="mode-btn" data-mode="semantic" onclick="setSearchMode('semantic')">🧠 语义</button>
+          <button class="btn btn-primary" onclick="doSearch()">搜索</button>
+        </div>
+        <div id="search-results" class="doc-list">
+          <p style="color:var(--text2);text-align:center;padding:40px;">输入关键词开始搜索</p>
+        </div>
+      </div>
+
+      <!-- Docs panel -->
+      <div id="panel-docs" class="panel">
+        <div class="cat-tags" id="cat-tags"></div>
+        <div id="docs-list" class="doc-list">
+          <p style="color:var(--text2);text-align:center;padding:40px;">加载中…</p>
+        </div>
+      </div>
+
+      <!-- Upload panel -->
+      <div id="panel-upload" class="panel">
+        <div style="margin-bottom:20px;display:flex;gap:8px;">
+          <input id="url-input" type="text" placeholder="输入文章 URL (如微信公众号/知乎等)，按回车抓取…" style="flex:1;padding:10px 16px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')handleUrl()">
+          <button class="btn btn-primary" onclick="handleUrl()">🌐 抓取网页</button>
+        </div>
+        
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📁</div>
+          <p>点击选择文件或拖拽到此处</p>
+          <p style="font-size:12px;margin-top:4px;">支持 md, txt, pdf, docx, py, 代码文件等（≤50MB）</p>
+        </div>
+        <input id="file-input" type="file" multiple style="display:none" onchange="handleFiles(this.files)" accept=".md,.txt,.pdf,.docx,.py,.js,.ts,.go,.rs,.java,.cpp,.c,.h,.json,.yaml,.yml,.toml,.html,.css,.csv,.xml,.rst">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text2)">分类:</label>
+          <select id="upload-category" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+            <option value="notes">notes</option>
+            <option value="articles">articles</option>
+            <option value="concepts">concepts</option>
+            <option value="technologies">technologies</option>
+            <option value="codes">codes</option>
+            <option value="projects">projects</option>
+            <option value="people">people</option>
+          </select>
+        </div>
+        <div id="upload-results"></div>
+      </div>
+
+      <!-- Graph panel -->
+      <div id="panel-graph" class="panel">
+        <div id="graph-container"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Document viewer modal -->
+<div class="modal-overlay" id="doc-modal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-title"></h3>
+      <button class="btn btn-ghost btn-sm" onclick="copyDocUrl()">📋 复制</button>
+      <button class="btn btn-ghost btn-sm" id="edit-btn" onclick="toggleEdit()">✏️ 编辑</button>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <textarea class="modal-body" id="modal-edit" style="display:none; width:100%; height:calc(100vh - 150px); font-family:monospace; resize:none; padding:20px; box-sizing:border-box;"></textarea>
+    <div class="modal-footer" id="modal-footer" style="display:none; padding:15px 20px; border-top:1px solid var(--bg3); text-align:right;">
+      <button class="btn btn-ghost" onclick="toggleEdit()">取消</button>
+      <button class="btn" onclick="saveDoc()">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════ State ═══════════
+let currentPanel = 'search';
+let searchMode = 'hybrid';
+let currentDocPath = '';
+let currentCat = '';
+
+// ═══════════ Navigation ═══════════
+function switchPanel(name) {
+  currentPanel = name;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelector(`[data-panel="${name}"]`).classList.add('active');
+  const titles = {search:'🔍 搜索', docs:'📄 文档管理', upload:'📤 上传文档', graph:'🕸️ 知识图谱'};
+  document.getElementById('panel-title').textContent = titles[name] || name;
+  if (name === 'docs') loadDocs();
+  if (name === 'graph') loadGraph();
+}
+
+// ═══════════ Search ═══════════
+function setSearchMode(mode) {
+  searchMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+}
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  const container = document.getElementById('search-results');
+  container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px;">搜索中…</p>';
+
+  try {
+    const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${searchMode}&limit=20`);
+    const data = await resp.json();
+    if (!data.results || data.results.length === 0) {
+      container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px;">无结果</p>';
+      return;
+    }
+    container.innerHTML = data.results.map(r => `
+      <div class="doc-card" onclick="viewDoc('${e(r.path)}')" style="cursor:pointer">
+        <div class="doc-icon">📄</div>
+        <div class="doc-info">
+          <div class="name">${e(r.name)}</div>
+          <div class="meta">${e(r.category)} · ${r.score_total ? r.score_total.toFixed(2) : ''}</div>
+          <div class="preview">${e(r.preview||'')}</div>
+        </div>
+        ${r.score_keyword > 0 ? `<span class="score good">KW:${r.score_keyword.toFixed(2)}</span>` : ''}
+        ${r.score_semantic > 0 ? `<span class="score medium">SEM:${r.score_semantic.toFixed(2)}</span>` : ''}
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--red);text-align:center;padding:40px;">搜索失败: ${err.message}</p>`;
+  }
+}
+
+// ═══════════ Documents ═══════════
+async function loadDocs() {
+  const container = document.getElementById('docs-list');
+  container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px;">加载中…</p>';
+
+  try {
+    const resp = await fetch('/api/documents' + (currentCat ? `?category=${encodeURIComponent(currentCat)}` : ''));
+    const data = await resp.json();
+
+    // Build category tags
+    const catMap = {};
+    data.documents.forEach(d => { catMap[d.category] = (catMap[d.category]||0) + 1; });
+    const tagsHtml = `<span class="cat-tag ${!currentCat?'active':''}" onclick="currentCat='';loadDocs();">全部 (${data.total})</span>` +
+      Object.entries(catMap).map(([k,v]) =>
+        `<span class="cat-tag ${currentCat===k?'active':''}" onclick="currentCat='${e(k)}';loadDocs();">${e(k)} (${v})</span>`
+      ).join('');
+    document.getElementById('cat-tags').innerHTML = tagsHtml;
+
+    if (data.documents.length === 0) {
+      container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px;">暂无文档</p>';
+      return;
+    }
+
+    container.innerHTML = data.documents.map(d => `
+      <div class="doc-card">
+        <div class="doc-icon">📄</div>
+        <div class="doc-info" onclick="viewDoc('${e(d.path)}')" style="cursor:pointer">
+          <div class="name">${e(d.name)}</div>
+          <div class="meta">${e(d.category)} · ${d.size_kb}KB · ${new Date(d.modified).toLocaleDateString('zh-CN')}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteDoc('${e(d.path)}')">🗑 删除</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--red);text-align:center;padding:40px;">加载失败: ${err.message}</p>`;
+  }
+}
+
+async function deleteDoc(path) {
+  if (!confirm(`确认删除 "${path}"？`)) return;
+  try {
+    const resp = await fetch(`/api/documents/${encodeURIComponent(path)}`, {method:'DELETE'});
+    if (!resp.ok) throw new Error((await resp.json()).error || 'Delete failed');
+    toast('已删除', 'success');
+    loadDocs();
+  } catch (err) {
+    toast('删除失败: ' + err.message, 'error');
+  }
+}
+
+// ═══════════ Upload ═══════════
+const uploadZone = document.getElementById('upload-zone');
+if (uploadZone) {
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+}
+
+async function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  const resultsDiv = document.getElementById('upload-results');
+  resultsDiv.innerHTML = '<p style="color:var(--text2);padding:8px;">上传中…</p>';
+
+  const form = new FormData();
+  for (const f of files) form.append('files', f);
+  form.append('category', document.getElementById('upload-category').value);
+
+  try {
+    const resp = await fetch('/api/documents', {method:'POST', body:form});
+    const data = await resp.json();
+    resultsDiv.innerHTML = data.results.map(r =>
+      `<div style="padding:6px 0;font-size:13px;color:${r.status==='ok'?'var(--green)':'var(--red)'}">
+        ${r.status==='ok'?'✅':'❌'} ${e(r.filename)} ${r.status==='ok'?'· '+r.size_kb+'KB':''} ${r.reason||''}
+      </div>`
+    ).join('');
+    if (data.processed && data.processed.length > 0) {
+      resultsDiv.innerHTML += '<div style="margin-top:8px;font-size:12px;color:var(--text2);">处理结果:</div>' +
+        data.processed.map(p => `<div style="font-size:12px;color:${p.processed?'var(--green)':'var(--yellow)'}">${p.processed?'✅':'⚠️'} ${e(p.filename)}: ${e(p.message)}</div>`).join('');
+    }
+    toast(`上传完成: ${data.uploaded}/${data.results.length} 个文件`, 'success');
+  } catch (err) {
+    resultsDiv.innerHTML = `<p style="color:var(--red);">上传失败: ${err.message}</p>`;
+    toast('上传失败: ' + err.message, 'error');
+  }
+}
+
+async function handleUrl() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) return;
+  
+  const resultsDiv = document.getElementById('upload-results');
+  resultsDiv.innerHTML = '<p style="color:var(--text2);padding:8px;">正在抓取网页内容，这可能需要10-30秒…</p>';
+  
+  const category = document.getElementById('upload-category').value;
+  const form = new FormData();
+  form.append('url', url);
+  form.append('category', category);
+  
+  try {
+    const resp = await fetch('/api/documents/url', {method:'POST', body:form});
+    const data = await resp.json();
+    
+    if (!resp.ok) {
+        throw new Error(data.error || 'Fetch failed');
+    }
+    
+    resultsDiv.innerHTML = `<div style="padding:6px 0;font-size:13px;color:var(--green)">
+        ✅ 网页抓取成功并已自动处理: ${data.wiki_path || url}
+      </div>`;
+    toast('抓取成功', 'success');
+    document.getElementById('url-input').value = '';
+    
+  } catch (err) {
+    resultsDiv.innerHTML = `<p style="color:var(--red);">抓取失败: ${err.message}</p>`;
+    toast('抓取失败: ' + err.message, 'error');
+  }
+}
+
+// ═══════════ Document viewer ═══════════
+async function viewDoc(path) {
+  currentDocPath = path;
+  try {
+    const resp = await fetch(`/api/documents/${encodeURIComponent(path)}`);
+    const data = await resp.json();
+    document.getElementById('modal-title').textContent = data.name;
+    document.getElementById('modal-body').textContent = data.content;
+    document.getElementById('modal-edit').value = data.content;
+    document.getElementById('doc-modal').classList.add('open');
+    // reset to view mode
+    document.getElementById('modal-body').style.display = 'block';
+    document.getElementById('modal-edit').style.display = 'none';
+    document.getElementById('modal-footer').style.display = 'none';
+    document.getElementById('edit-btn').style.display = 'inline-block';
+  } catch (err) {
+    toast('加载文档失败', 'error');
+  }
+}
+
+function toggleEdit() {
+  const body = document.getElementById('modal-body');
+  const edit = document.getElementById('modal-edit');
+  const footer = document.getElementById('modal-footer');
+  const btn = document.getElementById('edit-btn');
+  if (body.style.display === 'none') {
+    // Switch to view
+    body.style.display = 'block';
+    edit.style.display = 'none';
+    footer.style.display = 'none';
+    btn.style.display = 'inline-block';
+  } else {
+    // Switch to edit
+    body.style.display = 'none';
+    edit.style.display = 'block';
+    footer.style.display = 'block';
+    btn.style.display = 'none';
+  }
+}
+
+async function saveDoc() {
+  const newContent = document.getElementById('modal-edit').value;
+  try {
+    const resp = await fetch(`/api/documents/${encodeURIComponent(currentDocPath)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newContent })
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || 'Save failed');
+    toast('保存成功', 'success');
+    document.getElementById('modal-body').textContent = newContent;
+    toggleEdit();
+  } catch (err) {
+    toast('保存失败: ' + err.message, 'error');
+  }
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('doc-modal')) return;
+  document.getElementById('doc-modal').classList.remove('open');
+}
+
+function copyDocUrl() {
+  navigator.clipboard.writeText(currentDocPath).then(() => toast('已复制路径', 'success'));
+}
+
+// ═══════════ Knowledge graph ═══════════
+async function loadGraph() {
+  const container = document.getElementById('graph-container');
+  container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:200px;">加载图谱…</p>';
+
+  try {
+    const resp = await fetch('/api/graph');
+    const data = await resp.json();
+    if (!data.nodes || data.nodes.length === 0) {
+      container.innerHTML = '<p style="color:var(--text2);text-align:center;padding:200px;">暂无图谱数据</p>';
+      return;
+    }
+    renderGraph(data);
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--red);text-align:center;padding:200px;">图谱加载失败: ${err.message}</p>`;
+  }
+}
+
+function renderGraph(data) {
+  const container = document.getElementById('graph-container');
+  container.innerHTML = '';
+  const W = container.clientWidth, H = container.clientHeight;
+
+  // Simple canvas-based force graph (no D3 dep needed)
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 2;
+  canvas.height = H * 2;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+
+  // Position nodes
+  const nodes = data.nodes.map((n, i) => ({
+    ...n,
+    x: W/2 + (Math.random() - 0.5) * W * 0.6,
+    y: H/2 + (Math.random() - 0.5) * H * 0.6,
+    vx: 0, vy: 0,
+  }));
+
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  const links = (data.links || []).map(l => ({
+    source: nodeMap[l.source],
+    target: nodeMap[l.target],
+    weight: l.weight || 1,
+  }));
+
+  // Force simulation
+  function simulate() {
+    const alpha = 0.3;
+    const centerX = W/2, centerY = H/2;
+
+    // Forces
+    for (const n of nodes) {
+      // Center gravity
+      n.vx += (centerX - n.x) * 0.001;
+      n.vy += (centerY - n.y) * 0.001;
+    }
+
+    // Link forces
+    for (const l of links) {
+      const dx = l.target.x - l.source.x;
+      const dy = l.target.y - l.source.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      const force = (dist - 80) * 0.01;
+      const fx = dx / dist * force;
+      const fy = dy / dist * force;
+      l.source.vx += fx;
+      l.source.vy += fy;
+      l.target.vx -= fx;
+      l.target.vy -= fy;
+    }
+
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i+1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const force = 200 / (dist * dist);
+        const fx = dx / dist * force;
+        const fy = dy / dist * force;
+        nodes[i].vx -= fx; nodes[i].vy -= fy;
+        nodes[j].vx += fx; nodes[j].vy += fy;
+      }
+    }
+
+    // Update
+    for (const n of nodes) {
+      n.vx *= 0.9; n.vy *= 0.9;
+      n.x += n.vx;
+      n.y += n.vy;
+      n.x = Math.max(30, Math.min(W-30, n.x));
+      n.y = Math.max(30, Math.min(H-30, n.y));
+    }
+  }
+
+  // Run simulation
+  for (let i = 0; i < 200; i++) simulate();
+
+  // Draw
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Links
+    ctx.strokeStyle = 'rgba(138,145,170,0.3)';
+    ctx.lineWidth = 1;
+    for (const l of links) {
+      ctx.beginPath();
+      ctx.moveTo(l.source.x, l.source.y);
+      ctx.lineTo(l.target.x, l.target.y);
+      ctx.stroke();
+    }
+
+    // Nodes
+    for (const n of nodes) {
+      const r = 6 + (n.count || 1) * 2;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#6c8cff';
+      ctx.fill();
+      ctx.strokeStyle = '#0f1117';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#e1e4ed';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.name || n.id, n.x, n.y + r + 12);
+    }
+  }
+
+  draw();
+
+  // Click handler
+  canvas.onclick = e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    for (const n of nodes) {
+      const r = 6 + (n.count || 1) * 2;
+      if (Math.hypot(mx - n.x, my - n.y) < r + 10) {
+        switchPanel('search');
+        document.getElementById('search-input').value = n.name || n.id;
+        setSearchMode('keyword');
+        doSearch();
+        return;
+      }
+    }
+  };
+}
+
+// ═══════════ Stats (sidebar) ═══════════
+async function loadStats() {
+  try {
+    const resp = await fetch('/api/stats');
+    const data = await resp.json();
+    document.getElementById('sidebar-stats').innerHTML =
+      `📄 ${data.wiki_documents} 文档 · ${data.total_size_mb} MB<br>` +
+      `📂 ${Object.keys(data.categories||{}).length} 分类`;
+  } catch(e) {}
+}
+
+// ═══════════ Toast ═══════════
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ═══════════ Escape helpers ═══════════
+function e(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ═══════════ Init ═══════════
+loadStats();
+</script>
+
+</body>
+</html>

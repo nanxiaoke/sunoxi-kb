@@ -1,0 +1,14 @@
+# 测试URL列表
+# 用于测试webfetch-md集成
+
+# 阮一峰科技爱好者周刊
+https://www.ruanyifeng.com/blog/2026/02/weekly-issue-384.html
+
+# GitHub主页（简单页面）
+https://github.com
+
+# Python官方网站
+https://www.python.org
+
+# 示例页面（简单，可靠）
+https://www.example.com

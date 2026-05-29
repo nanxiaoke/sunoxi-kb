@@ -1,0 +1,312 @@
+# 模型配置文件 - Karpathy知识库项目
+# 记录各模型的最佳提示词、参数和行为特征
+
+# 模型配置模板
+model_configs:
+  # ========== Gemma 4 系列 ==========
+  gemma4:
+    # 模型匹配模式（用于检测）
+    patterns:
+      - "gemma4"
+      - "gemma-4"
+    
+    # 行为特征
+    behavior:
+      default_thinking_enabled: true  # 默认启用思考模式
+      content_field_issues: true     # content字段可能为空
+      requires_explicit_disable: true # 需要显式禁用思考
+    
+    # 最佳系统提示词（优先级顺序）
+    system_prompts:
+      - "Do not think. Just answer directly without showing your thinking process."
+      - "Provide direct answers without explanation or thinking."
+      - "Answer concisely and directly."
+      - "You are a helpful assistant. Respond directly without explanation."
+    
+    # API参数配置
+    api_params:
+      # Ollama特定参数
+      ollama:
+        think: false  # 禁用思考模式
+        temperature: 0.7
+        top_p: 0.9
+        num_predict: 800
+        repeat_penalty: 1.1
+        
+      # 通用API参数
+      generic:
+        thinking_enabled: false
+        max_tokens: 800
+        temperature: 0.7
+    
+    # 提示词格式建议
+    prompt_formatting:
+      avoid_system_prompt_length: 500  # 避免超过此长度的系统提示
+      recommended_user_prefix: ""      # 推荐的用户提示前缀
+      recommended_user_suffix: ""      # 推荐的用户提示后缀
+    
+    # 已知问题和解决方案
+    known_issues:
+      - issue: "Empty content field with thinking present"
+        solution: "Disable thinking mode via system prompt or api parameter"
+        references:
+          - "GitHub: ollama/ollama#15428"
+          - "Google Dev Forum: Disable thinking for Gemma 4"
+      
+      - issue: "Long system prompts cause early termination"
+        solution: "Keep system prompts under 500 characters"
+        
+      - issue: "OpenAI-compatible API endpoints may not pass think parameter"
+        solution: "Use native /api/chat endpoint with think=false"
+
+  # ========== DeepSeek 系列 ==========
+  deepseek:
+    patterns:
+      - "deepseek"
+      - "deep-seek"
+    
+    behavior:
+      default_thinking_enabled: false  # 默认禁用思考模式
+      content_field_issues: false      # content字段正常
+      has_dedicated_reasoner: true     # 有专用推理模型
+      
+    system_prompts:
+      - "You are a helpful assistant."
+      - "You are a knowledgeable research assistant."
+      - "Please answer the question concisely."
+    
+    api_params:
+      ollama:
+        think: false  # 通常保持禁用，除非需要推理
+        temperature: 0.8
+        num_predict: 1000
+        
+      generic:
+        thinking_enabled: false  # 显式禁用，除非需要
+        max_tokens: 1000
+        temperature: 0.8
+    
+    prompt_formatting:
+      avoid_system_prompt_length: 1000  # 较宽松的限制
+      recommended_user_prefix: ""
+      recommended_user_suffix: ""
+    
+    # DeepSeek专用模型
+    specialized_models:
+      reasoning_model: "deepseek-reasoner"
+      chat_model: "deepseek-chat"
+      hybrid_model: "deepseek-v3.1"
+
+  # ========== Llama 3 系列 ==========
+  llama3:
+    patterns:
+      - "llama3"
+      - "llama-3"
+    
+    behavior:
+      default_thinking_enabled: false
+      content_field_issues: false
+      
+    system_prompts:
+      - "You are a helpful assistant."
+      - "You are an expert researcher."
+      - "Please provide accurate and concise answers."
+    
+    api_params:
+      ollama:
+        temperature: 0.7
+        top_p: 0.9
+        num_predict: 1024
+        
+      generic:
+        max_tokens: 1024
+        temperature: 0.7
+    
+    prompt_formatting:
+      avoid_system_prompt_length: 1500
+      recommended_user_prefix: ""
+      recommended_user_suffix: ""
+
+  # ========== Qwen 系列 ==========
+  qwen:
+    patterns:
+      - "qwen"
+      - "qwen2"
+      - "qwen2.5"
+    
+    behavior:
+      default_thinking_enabled: false
+      content_field_issues: false
+      chinese_optimized: true  # 中文优化
+      
+    system_prompts:
+      - "You are a helpful assistant."
+      - "You are a helpful assistant that understands both English and Chinese."
+      - "请用中文回答。You are a helpful assistant."
+    
+    api_params:
+      ollama:
+        temperature: 0.8
+        num_predict: 1024
+        
+      generic:
+        max_tokens: 1024
+        temperature: 0.8
+    
+    prompt_formatting:
+      avoid_system_prompt_length: 1000
+      recommended_user_prefix: ""
+      recommended_user_suffix: ""
+
+  # ========== ChatGLM 系列 ==========
+  chatglm:
+    patterns:
+      - "chatglm"
+      - "chat-glm"
+    
+    behavior:
+      default_thinking_enabled: false
+      content_field_issues: false
+      chinese_optimized: true
+      
+    system_prompts:
+      - "You are a helpful assistant."
+      - "你是一个有用的助手。"
+      - "请用中文回答。You are a helpful assistant."
+    
+    api_params:
+      ollama:
+        temperature: 0.7
+        num_predict: 1024
+        
+      generic:
+        max_tokens: 1024
+        temperature: 0.7
+    
+    prompt_formatting:
+      avoid_system_prompt_length: 800
+      recommended_user_prefix: ""
+      recommended_user_suffix: ""
+
+  # ========== 默认配置（未知模型） ==========
+  default:
+    patterns:
+      - ".*"  # 匹配所有
+    
+    behavior:
+      default_thinking_enabled: false
+      content_field_issues: false
+      
+    system_prompts:
+      - "You are a helpful assistant."
+      - "Please answer the question concisely."
+    
+    api_params:
+      ollama:
+        temperature: 0.7
+        num_predict: 800
+        
+      generic:
+        max_tokens: 800
+        temperature: 0.7
+    
+    prompt_formatting:
+      avoid_system_prompt_length: 1000
+      recommended_user_prefix: ""
+      recommended_user_suffix: ""
+
+# 任务类型特定配置
+task_configs:
+  summarization:
+    system_prompt_templates:
+      - "You are a helpful research assistant that summarizes documents for a knowledge base. Provide clear, concise summaries that capture the main ideas."
+      - "Please summarize the following text in a clear and concise manner."
+    
+    user_prompt_templates:
+      - "Please summarize this document for a knowledge base. Provide a clear summary in under {max_length} words:\n\n{text}\n\nSummary:"
+      - "Summarize the following text in under {max_length} words:\n\n{text}\n\nSummary:"
+    
+    max_length_default: 300
+    preferred_models: ["gemma4", "deepseek", "llama3"]
+
+  categorization:
+    system_prompt_templates:
+      - "You are a helpful research assistant that categorizes documents for a knowledge base. Choose the most appropriate category from the given list."
+      - "Please classify the document into one of the provided categories."
+    
+    user_prompt_templates:
+      - "Classify this document: {categories}\n\nDocument: {text}\n\nCategory:"
+      - "Please categorize this document into one of these categories: {categories}\n\nDocument: {text}\n\nCategory:"
+    
+    default_categories: "technology, academic_paper, notes, code, article, news, tutorial, other"
+    preferred_models: ["gemma4", "deepseek"]
+
+  keypoint_extraction:
+    system_prompt_templates:
+      - "You are a helpful research assistant that extracts key points from documents. Provide numbered lists that capture the most important ideas."
+      - "Please extract the key points from the document."
+    
+    user_prompt_templates:
+      - "Extract {num_points} key points from this document. Provide a numbered list starting with '1.':\n\n{text}\n\nKey points:"
+      - "List {num_points} main points from the following text:\n\n{text}\n\nKey points:"
+    
+    default_num_points: 5
+    preferred_models: ["gemma4", "deepseek", "llama3"]
+
+  entity_extraction:
+    system_prompt_templates:
+      - "You are a helpful research assistant that extracts named entities from documents."
+      - "Please extract named entities from the text."
+    
+    user_prompt_templates:
+      - "Extract named entities from the following text:\n\n{text}\n\nEntities:"
+      - "Identify and list the named entities in this text:\n\n{text}\n\nEntities:"
+    
+    preferred_models: ["deepseek", "gemma4"]
+
+# 模型选择策略
+model_selection:
+  # 按任务类型推荐模型（优先级顺序）
+  by_task:
+    summarization: ["gemma4", "deepseek", "llama3"]
+    categorization: ["gemma4", "deepseek", "llama3"]
+    keypoint_extraction: ["gemma4", "deepseek", "llama3"]
+    entity_extraction: ["deepseek", "gemma4", "llama3"]
+  
+  # 回退顺序（当首选模型不可用时）
+  fallback_order: ["gemma4", "deepseek", "llama3", "qwen", "chatglm", "default"]
+  
+  # 性能考虑
+  performance:
+    fastest_models: ["gemma4:e4b", "qwen:7b", "llama3:8b"]
+    most_accurate: ["deepseek", "gemma4:26b", "llama3:70b"]
+    best_chinese: ["qwen", "chatglm", "deepseek"]
+
+# 监控和调优
+monitoring:
+  # 要跟踪的指标
+  metrics:
+    - response_time
+    - success_rate
+    - content_empty_rate
+    - thinking_present_rate
+    - token_usage
+  
+  # 阈值和警报
+  thresholds:
+    max_response_time: 30.0  # 秒
+    min_success_rate: 0.7    # 70%
+    max_content_empty_rate: 0.2  # 20%
+  
+  # 日志记录
+  logging:
+    level: "INFO"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file: "logs/model_performance.log"
+
+# 版本和元数据
+version: "1.0.0"
+created: "2026-04-17"
+updated: "2026-04-17"
+description: "Karpathy知识库项目模型配置文件"
+author: "OpenClaw Assistant"

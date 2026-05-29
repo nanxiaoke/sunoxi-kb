@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.bak
+*.backup
+*_backup.py
+
+# Secrets
+.env
+.env.*
+*.env
+llm.env
+config/llm.env
+
+# Personal source configuration
+rss_feeds.json
+wechat_sources.json
+monitor_config.json
+
+# Runtime data / personal KB content
+raw/**
+!raw/.keep
+wiki/**
+!wiki/.keep
+outputs/**
+!outputs/.keep
+reports/**
+!reports/.keep
+logs/**
+!logs/.keep
+backups/**
+!backups/.keep
+
+# Generated indexes, cache, state, and reports
+search_index.json
+wiki_index.json
+embeddings.npy
+embeddings_map.json
+qa_cache.json
+candidate_state.json
+rss_imported.json
+index_state.json
+knowledge_graph.json
+performance_metrics.json
+batch_progress.json
+batch_processing_report.txt
+batch_processing_stats.json
+progress.json
+web_ui.log
+search_optimization_plan.json
+search_optimization_report.txt
+simple_conversion_report.txt
+
+# Release/build artifacts
+dist/
+*.zip
+*.tar.gz
+
+# Local scratch
+.trash/
+.openclaw/

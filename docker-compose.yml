@@ -1,0 +1,31 @@
+services:
+  karpathy-kb:
+    build: .
+    container_name: karpathy-kb
+    ports:
+      - "5080:5080"
+    volumes:
+      - ./wiki:/app/wiki
+      - ./raw:/app/raw
+      - ./reports:/app/reports
+      - ./backups:/app/backups
+      - ./rss_feeds.json:/app/rss_feeds.json
+      - ./wechat_sources.json:/app/wechat_sources.json
+      - ./candidate_state.json:/app/candidate_state.json
+      - ./monitor_config.json:/app/monitor_config.json
+    restart: unless-stopped
+
+  karpathy-kb-monitor:
+    build: .
+    container_name: karpathy-kb-monitor
+    command: ["python3", "scripts/monitor.py", "watch"]
+    volumes:
+      - ./wiki:/app/wiki
+      - ./raw:/app/raw
+      - ./reports:/app/reports
+      - ./backups:/app/backups
+      - ./rss_feeds.json:/app/rss_feeds.json
+      - ./wechat_sources.json:/app/wechat_sources.json
+      - ./candidate_state.json:/app/candidate_state.json
+      - ./monitor_config.json:/app/monitor_config.json
+    restart: unless-stopped

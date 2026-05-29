@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "default_provider": "online_then_local",
+  "candidate_preview": {
+    "enabled": true,
+    "provider": "openai_compatible",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "fallback_provider": "ollama",
+    "fallback_model": "gemma4:e4b",
+    "max_chars": 1600,
+    "temperature": 0.1,
+    "think": false,
+    "num_predict": 700
+  },
+  "full_translation": {
+    "enabled": true,
+    "provider": "openai_compatible",
+    "model": "deepseek-v4-pro",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "fallback_provider": "ollama",
+    "fallback_model": "gemma4:e4b",
+    "chunk_chars": 3500,
+    "temperature": 0.1
+  },
+  "quality_check": {
+    "enabled": true,
+    "provider": "openai_compatible",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "fallback_provider": "ollama",
+    "fallback_model": "gemma4:e4b"
+  },
+  "translate_tiers_full": ["A", "B"],
+  "reviewed_imported_tier": "A"
+}

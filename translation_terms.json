@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "style": "technical_knowledge_base",
+  "terms": {
+    "Agent": "智能体（Agent）",
+    "AI Agent": "AI 智能体（AI Agent）",
+    "LLM": "大语言模型（LLM）",
+    "RAG": "检索增强生成（RAG）",
+    "MCP": "模型上下文协议（MCP）",
+    "embedding": "嵌入（embedding）",
+    "prompt": "提示词（prompt）",
+    "workflow": "工作流（workflow）",
+    "observability": "可观测性（observability）",
+    "inference": "推理（inference）",
+    "reasoning": "推理（reasoning）",
+    "tool calling": "工具调用（tool calling）",
+    "function calling": "函数调用（function calling）",
+    "context window": "上下文窗口（context window）",
+    "retrieval": "检索（retrieval）",
+    "semantic search": "语义搜索（semantic search）",
+    "hybrid search": "混合搜索（hybrid search）",
+    "fine-tuning": "微调（fine-tuning）",
+    "distillation": "蒸馏（distillation）",
+    "evaluation": "评估（evaluation）",
+    "benchmark": "基准测试（benchmark）",
+    "latency": "延迟（latency）",
+    "throughput": "吞吐量（throughput）",
+    "hallucination": "幻觉（hallucination）",
+    "guardrails": "护栏（guardrails）",
+    "alignment": "对齐（alignment）",
+    "multimodal": "多模态（multimodal）",
+    "orchestration": "编排（orchestration）",
+    "memory": "记忆（memory）",
+    "planning": "规划（planning）",
+    "reflection": "反思（reflection）"
+  },
+  "do_not_translate": [
+    "OpenAI", "Anthropic", "Claude", "Gemini", "DeepSeek", "Kimi", "Hermes", "LangChain", "LangGraph", "OpenClaw", "Ollama", "PyTorch", "TensorFlow", "Hugging Face"
+  ]
+}

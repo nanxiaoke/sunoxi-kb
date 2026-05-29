@@ -1,0 +1,187 @@
+# Non-sensitive runtime configuration for LLM calls.
+# Do not store API keys in this file. Use api_key_env to name the environment variable.
+
+version: 1
+providers:
+  local_gemma4:
+    type: ollama
+    label: Local Gemma4
+    model: gemma4:e4b
+    base_url: http://127.0.0.1:11434
+    timeout_sec: 120
+    options:
+      temperature: 0.2
+      think: false
+  deepseek_flash:
+    type: openai_compatible
+    label: DeepSeek Flash
+    model: deepseek-v4-flash
+    base_url: https://api.deepseek.com/v1
+    timeout_sec: 60
+    options:
+      temperature: 0.1
+    api_key_env: DEEPSEEK_API_KEY
+  deepseek_pro:
+    type: openai_compatible
+    label: DeepSeek Pro
+    model: deepseek-v4-pro
+    base_url: https://api.deepseek.com/v1
+    timeout_sec: 90
+    options:
+      temperature: 0.1
+    api_key_env: DEEPSEEK_API_KEY
+flows:
+  url_import_structure:
+    label: URL import structure
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 6000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  file_import_structure:
+    label: File import structure
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 6000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  candidate_preview:
+    label: Candidate preview translation
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 1600
+    intent: volume_first
+    notes: 'Deployment preset: hybrid. Candidate previews are local first with online
+      fallback.'
+    options: {}
+  candidate_quality_check:
+    label: Candidate quality check
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 3000
+    intent: balanced
+    notes: 'Deployment preset: hybrid. Quality checks are local first with online
+      fallback.'
+    options: {}
+  full_translation:
+    label: Full document translation
+    providers:
+    - deepseek_pro
+    - local_gemma4
+    allow_fallback: false
+    allow_online: true
+    fallback_notice: required
+    chunk_chars: 3500
+    intent: quality_first
+    notes: 'Deployment preset: hybrid. Quality-sensitive translation is online first;
+      explicit local selection remains available.'
+    options: {}
+  retranslation:
+    label: Manual re-translation
+    providers:
+    - deepseek_pro
+    - local_gemma4
+    allow_fallback: false
+    allow_online: true
+    fallback_notice: required
+    chunk_chars: 3500
+    intent: quality_first
+    notes: 'Deployment preset: hybrid. Quality-sensitive translation is online first;
+      explicit local selection remains available.'
+    options: {}
+  qa:
+    label: Interactive QA
+    providers:
+    - local_gemma4
+    - deepseek_pro
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 8000
+    intent: user_selectable
+    notes: 'Deployment preset: hybrid. QA defaults local and can fall back online
+      for hard questions.'
+    options: {}
+  entity_extraction:
+    label: Entity extraction
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 4000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  processor_summary:
+    label: Processor summary
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 5000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  processor_keypoints:
+    label: Processor keypoints
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 5000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  processor_category:
+    label: Processor category
+    providers:
+    - local_gemma4
+    - deepseek_flash
+    allow_fallback: true
+    allow_online: true
+    fallback_notice: record
+    chunk_chars: 3000
+    intent: cost_first
+    notes: 'Deployment preset: hybrid. Bulk work uses local first, DeepSeek Flash
+      fallback.'
+    options: {}
+  maintenance_links:
+    label: Link and association maintenance
+    providers:
+    - local_gemma4
+    allow_fallback: false
+    allow_online: false
+    fallback_notice: none
+    chunk_chars: 4000
+    intent: rules_first
+    notes: 'Deployment preset: hybrid. Link maintenance stays local/rules-first.'
+    options: {}

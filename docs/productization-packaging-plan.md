@@ -90,7 +90,7 @@ karpathy-kb/
 - [x] Move shared launcher logic into `packaging/common/` for Windows Git Bash and Linux.
 - [x] Add empty runtime directory placeholders without tracking article data.
 - [x] Add Windows git deployment documentation.
-- [ ] Test on a real Windows host with Python installed.
+- [x] Test on a real Windows host with Python installed.
 - [x] Add Linux green deployment through the same POSIX `.sh` scripts.
 - [x] Split heavyweight embedding dependencies out of default green deployment install.
 - [x] Verify a clean Linux clone can install dependencies, configure a key file, start WebUI, and pass `/health`.
@@ -138,6 +138,18 @@ Result:
 - `/api/stats` returned zero raw/wiki documents in the empty clone.
 - `/api/llm/config` returned 3 providers and 12 flows.
 - `POST /api/llm/mode` successfully applied `local`, `online`, and `hybrid`.
+
+## Windows Real Host Verification
+
+Verified on 2026-05-30 from `origin/main`.
+
+Result:
+
+- WebUI starts from `./packaging/windows/start_webui.sh`.
+- Runtime paths are project-relative in a git checkout.
+- Missing optional `jieba` no longer breaks QA/search import, and `jieba` is now included in default dependencies.
+- Startup output is safe for Windows terminals using legacy GBK encoding.
+- User confirmed real Windows deployment testing is OK.
 
 ## Deferred Task: Formal Distribution Packaging (Windows & Linux)
 

@@ -163,3 +163,4 @@ features:
 - 2026-05-30: Upload mode routing verified. Pure local used `local_gemma4 / gemma4:e4b`; pure online selected `deepseek_flash` and failed with `missing API key env: DEEPSEEK_API_KEY` without local fallback; default hybrid reported the actual local provider used.
 - 2026-05-30: Improved upload processing failures so missing key/provider/LLM errors are returned in the API response instead of only appearing in backend logs.
 - 2026-05-30: Added `docs/webui-settings-and-upload.md` and linked it from the README.
+- 2026-05-30: Task A follow-up fixes: chat bubble bot name now uses configured branding; maintenance LLM check now follows the current `maintenance_links` flow instead of hardcoded local Ollama; document retranslation action remains clickable so unavailable model/missing-key errors are shown explicitly.

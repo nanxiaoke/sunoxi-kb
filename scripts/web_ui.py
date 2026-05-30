@@ -2284,7 +2284,7 @@ def _run_batch_import_job(data: dict) -> None:
                 _batch_import_job.update({"status": "maintaining", "current": {"title": "批后轻量维护"}})
                 try:
                     from maintenance import KBMaintenance
-                    maint = KBMaintenance(KB_DIR, update_embeddings=update_embeddings, ollama_model=data.get("ollama_model", "gemma4:e4b"))
+                    maint = KBMaintenance(KB_DIR, update_embeddings=update_embeddings)
                     report = maint.run()
                     maintenance_result = {"status": report.get("status"), "summary": report.get("summary", {}), "report_path": report.get("report_path")}
                 except Exception as e:
@@ -2366,7 +2366,7 @@ def run_maintenance():
     update_embeddings = data.get("update_embeddings", False)
     try:
         from maintenance import KBMaintenance
-        maint = KBMaintenance(KB_DIR, update_embeddings=bool(update_embeddings), ollama_model=data.get("ollama_model", "gemma4:e4b"))
+        maint = KBMaintenance(KB_DIR, update_embeddings=bool(update_embeddings))
         report = maint.run()
         # Invalidate long-lived in-process caches after maintenance.
         global _searcher, _embedder, _graph, _qa_system
@@ -2542,7 +2542,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 </div>
                             </div>
                             <div class="chat-header mb-1 opacity-50 text-xs">
-                                {{ msg.role === 'user' ? 'You' : 'Sunoxi KB' }}
+                                {{ msg.role === 'user' ? 'You' : webuiApp.name }}
                                 <time v-if="msg.time" class="ml-1">{{ msg.time }}</time>
                             </div>
                             <div :class="['chat-bubble shadow-sm', msg.role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-ai']">
@@ -2680,7 +2680,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         </div>
                         <div class="flex gap-2 flex-wrap">
                             <input type="text" v-model="docSearchText" :placeholder="t('docs.filter')" class="input input-sm input-bordered rounded-full w-48 bg-base-200" />
-                            <button class="btn btn-sm btn-outline rounded-full" @click="runMaintenance" :disabled="isMaintaining" title="使用本地 Ollama/Gemma4 重建链接、检查坏链、重建索引">
+                            <button class="btn btn-sm btn-outline rounded-full" @click="runMaintenance" :disabled="isMaintaining" title="按当前 LLM 模式维护知识库、检查坏链并重建索引">
                                 <span v-if="isMaintaining" class="loading loading-spinner loading-xs mr-1"></span>
                                 <span v-else class="mr-1">🧹</span>
                                 {{ isMaintaining ? t('docs.maintaining') : t('docs.maintenance') }}
@@ -3661,7 +3661,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 {{ m.provider === 'online' ? 'Online' : 'Local' }}{{ m.available ? '' : ' · unavailable' }}
                             </option>
                         </select>
-                        <button class="btn btn-sm btn-outline" v-if="!isEditingDoc" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath || !selectedTranslationModel?.available">
+                        <button class="btn btn-sm btn-outline" v-if="!isEditingDoc" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath">
                             <span v-if="isRetranslating" class="loading loading-spinner loading-xs mr-1"></span>{{ t('doc.retranslate') }}
                         </button>
                         <button class="btn btn-sm btn-ghost" v-if="!isEditingDoc" @click="isEditingDoc = true">✏️ {{ t('common.edit') }}</button>
@@ -5111,12 +5111,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     if(isMaintaining.value) return;
                     isMaintaining.value = true;
                     maintenanceReport.value = null;
-                    showToast('正在维护知识库：本地 Gemma4 检查 / 重建链接 / lint / 索引...', 'info', 5000);
+                    showToast('正在维护知识库：按当前 LLM 模式检查 / 重建链接 / lint / 索引...', 'info', 5000);
                     try {
                         const res = await fetch('/api/maintenance', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ update_embeddings: false, ollama_model: 'gemma4:e4b' })
+                            body: JSON.stringify({ update_embeddings: false })
                         });
                         const report = await res.json();
                         maintenanceReport.value = report;

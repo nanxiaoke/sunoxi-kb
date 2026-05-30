@@ -119,15 +119,16 @@ class KBMaintenance:
         }
 
 
-    def _check_ollama_model(self) -> Dict[str, Any]:
-        """Check local Ollama/Gemma4 availability without calling external providers."""
+    def _check_ollama_model(self, *, model: str, base_url: str = "") -> Dict[str, Any]:
+        """Check local Ollama availability for local-only maintenance flows."""
         payload = json.dumps({
-            "model": self.ollama_model,
+            "model": model,
             "prompt": "只回复OK",
             "stream": False,
         }).encode("utf-8")
+        host = (base_url or self.ollama_host).rstrip("/")
         req = urllib.request.Request(
-            f"{self.ollama_host}/api/generate",
+            f"{host}/api/generate",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -137,11 +138,37 @@ class KBMaintenance:
             data = json.loads(resp.read().decode("utf-8"))
         return {
             "provider": "ollama",
-            "model": self.ollama_model,
+            "model": model,
             "status": "ok" if data.get("done") else "warn",
             "response_preview": str(data.get("response", ""))[:80],
             "duration_sec": round(time.time() - t0, 2),
         }
+
+    def _check_maintenance_llm(self) -> Dict[str, Any]:
+        """Check the provider selected by the current maintenance_links flow."""
+        sys.path.insert(0, str(self.scripts_dir))
+        from llm_service import LLMConfig  # type: ignore
+
+        config = LLMConfig()
+        flow = config.flow("maintenance_links")
+        provider_name = flow.providers[0] if flow.providers else ""
+        if not provider_name:
+            return {"provider": "", "model": "", "flow": flow.name, "status": "failed", "error": "maintenance_links has no provider"}
+        provider = config.provider(provider_name)
+        if provider.is_online:
+            status = "ok" if provider.has_required_secret else "failed"
+            return {
+                "provider": provider.name,
+                "type": provider.type,
+                "model": provider.model,
+                "flow": flow.name,
+                "status": status,
+                "key_env": provider.api_key_env or None,
+                "error": None if status == "ok" else f"missing API key env: {provider.api_key_env or 'KB_LLM_API_KEY'}",
+            }
+        report = self._check_ollama_model(model=provider.model, base_url=provider.base_url)
+        report.update({"provider": provider.name, "type": provider.type, "flow": flow.name})
+        return report
 
     def _update_embeddings(self) -> Dict[str, Any]:
         sys.path.insert(0, str(self.scripts_dir))
@@ -165,17 +192,17 @@ class KBMaintenance:
         self.report["summary"].update(self._doc_counts())
 
         t0 = time.time()
-        model_step = {"name": "local_ollama_model_check", "status": "running", "duration_sec": None}
+        model_step = {"name": "maintenance_llm_check", "status": "running", "duration_sec": None}
         self.report["steps"].append(model_step)
         try:
-            model_report = self._check_ollama_model()
+            model_report = self._check_maintenance_llm()
             model_step["status"] = model_report.get("status", "ok")
             model_step["result"] = model_report
             self.report["summary"]["model"] = model_report
         except Exception as e:
             model_step["status"] = "failed"
             model_step["error"] = str(e)
-            self.report["summary"]["model"] = {"provider": "ollama", "model": self.ollama_model, "status": "failed", "error": str(e)}
+            self.report["summary"]["model"] = {"provider": "", "model": "", "status": "failed", "error": str(e)}
         finally:
             model_step["duration_sec"] = round(time.time() - t0, 2)
 
@@ -277,7 +304,7 @@ def main() -> int:
             print(f"关联: 孤立 {assoc.get('orphans', '?')}，弱关联 {assoc.get('weak_docs', '?')}，实体 {assoc.get('entities', '?')}")
         model = summary.get("model", {})
         if model:
-            print(f"本地模型: {model.get('provider')} / {model.get('model')} / {model.get('status')}")
+            print(f"LLM: {model.get('provider')} / {model.get('model')} / {model.get('status')}")
         if emb:
             if emb.get("skipped"):
                 print("Embedding: 已跳过（默认关闭，避免外部模型下载）")

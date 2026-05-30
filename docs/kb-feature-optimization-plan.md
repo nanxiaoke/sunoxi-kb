@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task D first pass complete as of 2026-05-30.
+Status: Task E first pass complete as of 2026-05-30.
 
 ## Decision
 
@@ -274,7 +274,7 @@ Task E: Knowledge maintenance and cleanup.
 - [x] Surface duplicate counts in WebUI association and maintenance feedback.
 - [x] Add a focused smoke test for duplicate detection.
 - [x] Improve low-quality document report visibility in the Docs tab.
-- [ ] Add safer review-first cleanup actions for duplicate groups.
+- [x] Add safer review-first cleanup actions for duplicate groups.
 
 ### Implementation Progress
 
@@ -283,3 +283,4 @@ Task E: Knowledge maintenance and cleanup.
 - 2026-05-30: WebUI association badges and maintenance completion messages now include duplicate group counts so cleanup problems are visible after normal maintenance runs.
 - 2026-05-30: Added `scripts/smoke_association_report.py`, which builds an isolated temporary wiki and verifies duplicate group summary, reason, affected docs, and keep suggestion without touching the real knowledge base.
 - 2026-05-30: Docs tab quality visibility improved with a warning summary, issue breakdown, `only repairable` filter, and per-document issue labels for missing summaries, keypoints, entities, or scan failures.
+- 2026-05-30: Duplicate groups in the association report now provide review-first buttons for every affected document, with the suggested keep document highlighted. Cleanup remains manual until a safe diff/trash flow is added.

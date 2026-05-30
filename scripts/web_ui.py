@@ -2737,9 +2737,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <span class="font-semibold text-warning">孤立文档：</span>
                             <span v-for="o in associationReport.orphans.slice(0,3)" :key="o.path" class="mr-2">{{ o.title || o.path }}</span>
                         </div>
-                        <div v-if="associationReport.duplicate_groups?.length" class="mt-2 text-xs opacity-80">
+                        <div v-if="associationReport.duplicate_groups?.length" class="mt-3 text-xs opacity-90 space-y-2">
                             <span class="font-semibold text-warning">疑似重复：</span>
-                            <span v-for="g in associationReport.duplicate_groups.slice(0,3)" :key="g.type + ':' + g.key" class="mr-2">{{ g.reason }} · {{ g.doc_count }}篇 · 建议保留 {{ g.keep_suggestion }}</span>
+                            <div v-for="g in associationReport.duplicate_groups.slice(0,3)" :key="g.type + ':' + g.key" class="rounded-xl border border-warning/30 bg-warning/5 p-2">
+                                <div class="mb-1">{{ g.reason }} · {{ g.doc_count }}篇 · 建议保留 {{ g.keep_suggestion }}</div>
+                                <div class="flex flex-wrap gap-1">
+                                    <button v-for="d in g.docs" :key="g.key + d.path"
+                                        :class="['btn btn-xs', d.path === g.keep_suggestion ? 'btn-success' : 'btn-outline']"
+                                        @click="previewDoc(d.path)"
+                                        :title="d.path">
+                                        {{ d.path === g.keep_suggestion ? '建议保留' : '审查' }} · {{ d.title || d.path }}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <div v-if="associationReport.auto_link_candidates?.length" class="mt-2 text-xs opacity-80">
                             <span class="font-semibold text-warning">可自动补链：</span>

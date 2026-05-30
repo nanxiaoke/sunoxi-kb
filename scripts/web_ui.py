@@ -2600,7 +2600,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             </div>
                             <div class="chat-bubble chat-bubble-ai opacity-70 flex items-center gap-2">
                                 <span class="loading loading-dots loading-sm"></span>
-                                <span class="text-sm">{{ chatAnswerMode === 'llm' ? '正在调用模型生成，可能需要几十秒...' : '正在检索并生成极速答案...' }}</span>
+                                <span class="text-sm">
+                                    {{ chatAnswerMode === 'llm' ? '正在调用模型生成，可能需要几十秒...' : '正在检索并生成极速答案...' }}
+                                    <span v-if="chatAnswerMode === 'llm' && qaProviderChain" class="block text-xs opacity-70 mt-1">qa: {{ qaProviderChain }}</span>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -2626,6 +2629,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <span class="label-text text-xs opacity-70">{{ chatAnswerMode === 'llm' ? '模型生成' : '极速答案' }}</span> 
                                     <input type="checkbox" :checked="chatAnswerMode === 'llm'" @change="chatAnswerMode = $event.target.checked ? 'llm' : 'extractive'" class="toggle toggle-primary toggle-sm" />
                                 </label>
+                                <span v-if="chatAnswerMode === 'llm' && qaProviderChain" class="text-[11px] opacity-50 max-w-44 truncate" :title="qaProviderChain">qa: {{ qaProviderChain }}</span>
                             </div>
                         </form>
                     </div>
@@ -4096,6 +4100,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const llmModeDescription = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.description) || '');
                 const fileImportFlow = computed(() => llmFlows.value.find(f => f.name === 'file_import_structure') || null);
                 const fileImportProviderChain = computed(() => (fileImportFlow.value?.providers || []).map(name => {
+                    const p = llmProviders.value.find(item => item.name === name);
+                    return p ? `${name} / ${p.model}` : name;
+                }).join(' -> '));
+                const qaFlow = computed(() => llmFlows.value.find(f => f.name === 'qa') || null);
+                const qaProviderChain = computed(() => (qaFlow.value?.providers || []).map(name => {
                     const p = llmProviders.value.find(item => item.name === name);
                     return p ? `${name} / ${p.model}` : name;
                 }).join(' -> '));
@@ -5613,6 +5622,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     webuiConfig, webuiApp, webuiFeatures, featureEnabled, loadingWebuiConfig, savingWebuiConfig, loadWebuiConfig, saveWebuiConfig, saveAllSettings, refreshAllSettings,
                     toasts, 
                     chatInput, chatHistory, isWaiting, submitChat, chatAnswerMode, renderMarkdown, ask,
+                    qaProviderChain,
                     docs, filteredDocs, folderRows, visibleDocs, pagedVisibleDocs, docsPage, docsPageSize, docsTotalPages, selectedDocFolder, loadingDocs, docSearchText, loadDocs, qualityBadCount, repairingQuality, repairDocQuality, repairAllQuality, deleteDoc,
                     isMaintaining, maintenanceReport, runMaintenance,
                     candidates, candidateGroups, candidateSummary, candidateTierFilter, candidateTypeFilter, candidateIncludeSkipped, loadingCandidates, importingCandidateId, translatingCandidateId, batchTranslatingPreview, batchImportingA, batchImportLimit, batchImportRetries, batchImportJob, loadBatchImportStatus, batchSkippingCandidates, candidateEditOpen, savingCandidateEdit, candidateEditItem, candidateEditOriginalTitle, candidateEditForm, lastImportResult, openLastImportedDoc, searchLastImported, tierBadgeClass, tierLabel, tierCardClass, formatCandidateDate, loadCandidates, previewCandidate, translateCandidate, batchTranslatePreview, batchImportA, editCandidate, closeCandidateEdit, saveCandidateEdit, batchSkipLowQuality, importCandidate, skipCandidate, restoreCandidate,

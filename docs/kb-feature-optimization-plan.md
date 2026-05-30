@@ -215,7 +215,7 @@ Task C: QA performance and runtime behavior.
 - [x] Pass configured `timeout_sec` from `llm_runtime.yaml` into provider HTTP calls.
 - [x] Surface provider timeout/fallback failures more clearly in WebUI QA responses.
 - [x] Add a lightweight runtime smoke for provider config metadata without live network calls.
-- [ ] Review QA loading states and retry guidance for slow/failing LLM mode.
+- [x] Review QA loading states and retry guidance for slow/failing LLM mode.
 
 ### Implementation Progress
 
@@ -223,3 +223,4 @@ Task C: QA performance and runtime behavior.
 - 2026-05-30: Provider timeout wiring fixed: `LLMService` now passes each provider's configured `timeout_sec` into `OllamaProvider` and `OpenAIProvider`, and both clients use that value for HTTP calls.
 - 2026-05-30: Added `scripts/smoke_llm_runtime.py` to validate provider client construction and timeout wiring without contacting live Ollama/DeepSeek services.
 - 2026-05-30: WebUI chat now surfaces LLM QA runtime status more explicitly: provider/model badge turns error-colored on failures, fallback path is shown when present, and model errors such as timeout or missing key are displayed inline in the answer bubble.
+- 2026-05-30: LLM QA loading state now shows the active `qa` provider chain when model generation is selected, so users can see which local/online route is being attempted before a slow call completes.

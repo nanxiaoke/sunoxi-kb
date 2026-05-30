@@ -94,6 +94,7 @@ karpathy-kb/
 - [x] Add Linux green deployment through the same POSIX `.sh` scripts.
 - [x] Split heavyweight embedding dependencies out of default green deployment install.
 - [x] Verify a clean Linux clone can install dependencies, configure a key file, start WebUI, and pass `/health`.
+- [x] Add Git deployment/update/troubleshooting guide for Windows and Linux.
 
 ## Acceptance Criteria For Windows Git Deployment V1
 

@@ -2,16 +2,19 @@
 
 This is the Windows compatibility launcher set for a git checkout. The real cross-platform scripts live in `packaging/common/`; these files forward to them.
 
+For the full current deployment guide, see `docs/git-deployment.md`.
+
 ## Requirements
 
-- Windows 10/11 with Git Bash, or Linux with `sh`
+- Windows 10/11 with Git Bash
 - Python 3.11 or newer in `PATH`
 - Internet access for dependency installation and CDN WebUI assets
+- GitHub SSH access to `git@github.com:nanxiaoke/sunoxi-kb.git`
 - Optional: Ollama already installed and running if you use local or hybrid mode
 
 ## First Run
 
-Open Git Bash or a Linux shell in the repository root:
+Open Git Bash in the repository root:
 
 ```bash
 ./packaging/windows/install_deps.sh
@@ -71,3 +74,31 @@ DEEPSEEK_API_KEY=...
 ## Runtime Data
 
 Article data, generated wiki pages, indexes, embeddings, caches, logs, reports, and backups are local runtime data. They are intentionally excluded from git by `.gitignore`.
+
+## Updates
+
+From Git Bash in the repository root:
+
+```bash
+git pull
+./packaging/common/install_deps.sh
+./packaging/common/start_webui.sh
+```
+
+You do not normally need to re-run `configure_key.sh` because `config/llm.env` is local and ignored by git.
+
+## Common Issues
+
+If `python` is not found, reinstall Python 3.11+ and enable "Add python.exe to PATH".
+
+If SSH clone fails, confirm the machine has a GitHub SSH key and test:
+
+```bash
+ssh -T git@github.com
+```
+
+If port `5080` is occupied:
+
+```bash
+PORT=5090 ./packaging/common/start_webui.sh
+```

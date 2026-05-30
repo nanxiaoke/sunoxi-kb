@@ -73,6 +73,8 @@ Windows 兼容入口：
 
 说明：`packaging/common/` 是跨平台主入口，`packaging/windows/` 只保留兼容包装。首次启动是空知识库，需要通过 WebUI 或脚本导入文章。
 
+完整部署、更新和排错说明见 [docs/git-deployment.md](docs/git-deployment.md)。
+
 默认依赖只覆盖 WebUI、在线模型、候选池、RSS/URL/文件导入等核心功能。语义向量依赖较大，需要时再安装：
 
 ```bash

@@ -51,6 +51,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+ALLOWED_CATEGORIES = ["技术", "学术论文", "笔记", "代码", "教程", "新闻", "文章", "其他"]
+CATEGORY_ALIASES = {
+    "tech": "技术",
+    "technology": "技术",
+    "technologies": "技术",
+    "技术文章": "技术",
+    "工具": "技术",
+    "开源项目": "技术",
+    "paper": "学术论文",
+    "papers": "学术论文",
+    "论文": "学术论文",
+    "research": "学术论文",
+    "note": "笔记",
+    "notes": "笔记",
+    "代码片段": "代码",
+    "code": "代码",
+    "tutorial": "教程",
+    "guide": "教程",
+    "指南": "教程",
+    "news": "新闻",
+    "资讯": "新闻",
+    "article": "文章",
+    "articles": "文章",
+}
+
 class OllamaClient:
     """原 Ollama API 客户端，现已重构为统一 LLM 客户端适配器"""
     
@@ -142,6 +167,79 @@ class DocumentProcessor:
         # 创建目录
         self.wiki_dir.mkdir(parents=True, exist_ok=True)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    def _clean_single_line(self, value: Any, *, fallback: str = "", max_len: int = 180) -> str:
+        text = str(value or "").strip()
+        text = re.sub(r"^```(?:\w+)?|```$", "", text).strip()
+        text = re.sub(r"^\s*[-*•\d.、]+", "", text).strip()
+        text = re.sub(r"^(分类|category|摘要|summary|实体|entities|标签|tags)\s*[:：]\s*", "", text, flags=re.I)
+        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`")
+        return (text or fallback)[:max_len].strip()
+
+    def _normalize_category(self, raw: Any, doc_format: str = "") -> str:
+        text = self._clean_single_line(raw, fallback="")
+        lowered = text.lower()
+        if text in ALLOWED_CATEGORIES:
+            return text
+        if lowered in CATEGORY_ALIASES:
+            return CATEGORY_ALIASES[lowered]
+        for key, category in CATEGORY_ALIASES.items():
+            if key and (key in lowered or key in text):
+                return category
+        for category in ALLOWED_CATEGORIES:
+            if category in text:
+                return category
+        if doc_format == "code":
+            return "代码"
+        if doc_format == "markdown":
+            return "笔记"
+        return "其他"
+
+    def _normalize_list(self, raw: Any, *, max_items: int = 12, max_len: int = 40) -> List[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            parts = raw
+        else:
+            text = str(raw)
+            text = re.sub(r"^```(?:\w+)?|```$", "", text.strip()).strip()
+            lines = []
+            for line in text.splitlines():
+                line = re.sub(r"^\s*[-*•\d.、]+", "", line).strip()
+                if line:
+                    lines.append(line)
+            parts = []
+            for line in lines or [text]:
+                parts.extend(re.split(r"[,，;；、/|]", line))
+
+        result = []
+        seen = set()
+        for item in parts:
+            clean = self._clean_single_line(item, max_len=max_len)
+            if not clean:
+                continue
+            if clean in {"无", "无实体", "未提取到实体", "（未提取到实体）", "none", "null"}:
+                continue
+            key = clean.lower()
+            if key not in seen:
+                seen.add(key)
+                result.append(clean)
+            if len(result) >= max_items:
+                break
+        return result
+
+    def _fallback_summary(self, content: str, max_len: int = 240) -> str:
+        clean = re.sub(r"\s+", " ", content or "").strip()
+        return (clean[:max_len] + ("..." if len(clean) > max_len else "")) or "（无可用摘要）"
+
+    def _fallback_keypoints(self, content: str, max_points: int = 3) -> str:
+        lines = [line.strip() for line in (content or "").splitlines() if line.strip()]
+        if not lines:
+            return "1. （无可用关键点）"
+        return "\n".join([f"{i + 1}. {line[:120]}" for i, line in enumerate(lines[:max_points])])
+
+    def _yaml_quote(self, value: Any) -> str:
+        return json.dumps(str(value or ""), ensure_ascii=False)
     
     def read_document(self, filepath: Path) -> Optional[Dict[str, Any]]:
         """读取文档内容"""
@@ -421,14 +519,23 @@ class DocumentProcessor:
                 # 实体提取失败时留空
                 entities = ""
             
+            category = self._normalize_category(category, doc_info.get("format", ""))
+            summary = self._clean_single_line(summary, fallback="", max_len=600) or self._fallback_summary(doc_info["content"])
+            if keypoints.startswith("（") or "失败" in keypoints:
+                keypoints = self._fallback_keypoints(doc_info["content"])
+            entities_list = self._normalize_list(entities)
+            tag_list = self._normalize_list(metadata.get("tags") or [])
+            if category not in tag_list:
+                tag_list.insert(0, category)
+
             # 构建结果
             result = {
                 **doc_info,
                 "summary": summary,
                 "keypoints": keypoints,
                 "category": category.strip(),
-                "entities": entities,
-                "tags": metadata.get("tags") or [],
+                "entities": entities_list,
+                "tags": tag_list,
                 "processed_at": datetime.now().isoformat(),
                 "model_used": model_used
             }
@@ -471,14 +578,18 @@ class DocumentProcessor:
             result_tags = result.get("tags") or []
             if isinstance(result_tags, str):
                 result_tags = [t.strip() for t in re.split(r"[,，;；]", result_tags) if t.strip()]
-            tag_lines = "\n".join([f"  - {t}" for t in ([result['category']] + [t for t in result_tags if t != result['category']])])
+            tag_lines = "\n".join([f"  - {self._yaml_quote(t)}" for t in ([result['category']] + [t for t in result_tags if t != result['category']])])
+            entities = result.get("entities") or []
+            if isinstance(entities, str):
+                entities = self._normalize_list(entities)
+            entities_text = "\n".join([f"- {entity}" for entity in entities]) if entities else "（未提取到实体）"
             # 构建wiki内容
             wiki_content = f"""---
-title: "{result['title']}"
-category: {result['category']}
-date: {result['processed_at']}
-model: {result['model_used']}
-source: {result['filepath']}
+title: {self._yaml_quote(result['title'])}
+category: {self._yaml_quote(result['category'])}
+date: {self._yaml_quote(result['processed_at'])}
+model: {self._yaml_quote(result['model_used'])}
+source: {self._yaml_quote(result['filepath'])}
 tags:
 {tag_lines}
 ---
@@ -501,7 +612,7 @@ tags:
 
 ## 🏷️ 实体与概念
 
-{result['entities'] if result['entities'] else "（未提取到实体）"}
+{entities_text}
 
 ## 📄 原始内容
 

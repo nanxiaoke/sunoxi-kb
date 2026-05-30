@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task C in progress as of 2026-05-30.
+Status: Task D in progress as of 2026-05-30.
 
 ## Decision
 
@@ -224,3 +224,31 @@ Task C: QA performance and runtime behavior.
 - 2026-05-30: Added `scripts/smoke_llm_runtime.py` to validate provider client construction and timeout wiring without contacting live Ollama/DeepSeek services.
 - 2026-05-30: WebUI chat now surfaces LLM QA runtime status more explicitly: provider/model badge turns error-colored on failures, fallback path is shown when present, and model errors such as timeout or missing key are displayed inline in the answer bubble.
 - 2026-05-30: LLM QA loading state now shows the active `qa` provider chain when model generation is selected, so users can see which local/online route is being attempted before a slow call completes.
+
+## Current Planned Task D
+
+Task D: Import quality for URL, RSS, WeChat, and files.
+
+### Scope
+
+- Improve title, summary, tags, category, and entity extraction stability.
+- Normalize LLM-generated metadata before saving wiki files.
+- Add clearer retry and recovery behavior for failed imports.
+- Make source-specific limitations visible in the UI.
+- Avoid misleading menus in environments where RSS/WeChat discovery is unavailable.
+
+### Task D Subtasks
+
+- [x] Normalize generated category, tags, and entities before wiki save.
+- [x] Harden wiki frontmatter quoting for imported documents.
+- [x] Add non-network smoke for import metadata quality.
+- [ ] Improve title cleanup across URL/RSS/WeChat/file import paths.
+- [ ] Add clearer failed-import retry/recovery state in WebUI.
+- [ ] Surface source-specific limitations and disabled-environment guidance in UI.
+
+### Implementation Progress
+
+- 2026-05-30: Task D started after user confirmed the recommended next mainline. First target is the shared import processor because it affects file, URL, RSS, and reviewed candidate imports downstream.
+- 2026-05-30: Added normalization for LLM-generated categories, tags, and entities. Verbose or mixed category outputs such as `分类：技术文章 / AI 工具` now map to stable categories such as `技术`; entity/tag lists are split, cleaned, deduplicated, and capped.
+- 2026-05-30: Hardened generated wiki frontmatter by YAML-quoting title, category, date, model, source, and tags, reducing risk from Windows paths, colons, quotes, and multiline LLM outputs.
+- 2026-05-30: Added `scripts/smoke_import_quality.py`, a no-network smoke test with a dirty fake LLM response that verifies category normalization, entity deduplication, tag insertion, and valid YAML frontmatter.

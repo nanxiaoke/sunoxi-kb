@@ -19,10 +19,8 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# 项目路径
-KB_DIR = Path.home() / "karpathy-kb"
-CONFIG_FILE = KB_DIR / "rss_feeds.json"
-IMPORTED_FILE = KB_DIR / "rss_imported.json"
+# 项目路径。默认跟随当前源码仓库，避免部署到 Windows/Linux 后继续写入 home 下旧路径。
+KB_DIR = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -272,10 +270,12 @@ class RSSManager:
     """RSS订阅管理器"""
     
     def __init__(self, kb_dir: Path = KB_DIR):
-        self.kb_dir = kb_dir
-        self.raw_dir = kb_dir / "raw" / "rss_candidates"
+        self.kb_dir = Path(kb_dir)
+        self.raw_dir = self.kb_dir / "raw" / "rss_candidates"
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.candidate_dir = self.raw_dir
+        self.config_file = self.kb_dir / "rss_feeds.json"
+        self.imported_file = self.kb_dir / "rss_imported.json"
         self.generate_preview = os.environ.get("KB_RSS_GENERATE_PREVIEW", "1").lower() not in {"0", "false", "no", "off"}
         
         self.config: Dict[str, FeedSource] = {}
@@ -285,9 +285,9 @@ class RSSManager:
     
     def _load_config(self):
         """加载订阅配置"""
-        if CONFIG_FILE.exists():
+        if self.config_file.exists():
             try:
-                raw = json.loads(CONFIG_FILE.read_text())
+                raw = json.loads(self.config_file.read_text())
                 self.config = {}
                 for k, v in raw.items():
                     self.config[k] = FeedSource(**v)
@@ -302,14 +302,14 @@ class RSSManager:
     def _add_default_feeds(self):
         """添加默认示例源（用户需自行配置实际感兴趣的源）"""
         defaults = {}
-        CONFIG_FILE.write_text(json.dumps(defaults, ensure_ascii=False, indent=2))
+        self.config_file.write_text(json.dumps(defaults, ensure_ascii=False, indent=2))
         logger.info("已创建默认配置（空），请编辑 rss_feeds.json 添加订阅源")
     
     def _load_imported(self):
         """加载已导入记录"""
-        if IMPORTED_FILE.exists():
+        if self.imported_file.exists():
             try:
-                raw = json.loads(IMPORTED_FILE.read_text())
+                raw = json.loads(self.imported_file.read_text())
                 self.imported = {k: set(v) for k, v in raw.items()}
             except Exception:
                 self.imported = {}
@@ -319,7 +319,7 @@ class RSSManager:
     def _save_imported(self):
         """保存已导入记录"""
         raw = {k: list(v) for k, v in self.imported.items()}
-        IMPORTED_FILE.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
+        self.imported_file.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
     
     # ========== 公开方法 ==========
     
@@ -355,7 +355,7 @@ class RSSManager:
     def _save_config(self):
         """保存配置"""
         raw = {k: asdict(v) for k, v in self.config.items()}
-        CONFIG_FILE.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
+        self.config_file.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
     
     def sync_all(self, max_per_source: int = 5, auto_process: bool = True) -> Dict:
         """同步所有启用的订阅源
@@ -536,11 +536,11 @@ class RSSManager:
                 interval = f"{feed.interval_minutes}min"
                 print(f"  {feed.name:<20} {feed.category:<15} {interval:<8} {status:<6}")
             print()
-            print(f"  编辑配置: {CONFIG_FILE}")
+            print(f"  编辑配置: {self.config_file}")
         else:
             print(f"  ⚠️  暂无订阅源")
             print(f"  添加: kb_cli.py rss add <url> --name <名称> --category <分类>")
-            print(f"  或编辑: {CONFIG_FILE}")
+            print(f"  或编辑: {self.config_file}")
 
 
 # ========== 命令行入口 ==========

@@ -859,7 +859,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Karpathy 知识库候选池管理")
     parser.add_argument("command", choices=["list", "quality", "show", "translate", "translate-preview-batch", "edit", "import", "skip", "restore", "batch-skip"])
     parser.add_argument("id", nargs="?")
-    parser.add_argument("--base-dir", default=str(Path.home() / "karpathy-kb"))
+    parser.add_argument("--base-dir", default=str(Path(__file__).resolve().parent.parent))
     parser.add_argument("--include-imported", action="store_true")
     parser.add_argument("--include-skipped", action="store_true")
     parser.add_argument("--no-process", action="store_true")

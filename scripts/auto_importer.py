@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 添加项目路径
-KB_BASE_DIR = Path.home() / "karpathy-kb"
+KB_BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KB_BASE_DIR / "scripts"))
 
 

@@ -251,7 +251,7 @@ class KBMaintenance:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Karpathy知识库维护流水线")
-    parser.add_argument("--base-dir", default=str(Path.home() / "karpathy-kb"), help="知识库目录")
+    parser.add_argument("--base-dir", default=str(Path(__file__).resolve().parent.parent), help="知识库目录")
     parser.add_argument("--embeddings", action="store_true", help="显式重建语义向量（默认关闭，避免拉取外部embedding模型）")
     parser.add_argument("--no-embeddings", action="store_true", help="兼容旧参数：跳过语义向量重建")
     parser.add_argument("--ollama-model", default="gemma4:e4b", help="本地Ollama模型，默认 gemma4:e4b")

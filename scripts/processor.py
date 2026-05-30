@@ -22,6 +22,10 @@ import frontmatter
 from llm_service import LLMService
 from bs4 import BeautifulSoup
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
+DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 # 模型自适应层
 try:
     # 相对导入（当作为模块使用时）
@@ -41,7 +45,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Path.home() / "karpathy-kb" / "logs" / "processor.log"),
+        logging.FileHandler(DEFAULT_LOG_DIR / "processor.log"),
         logging.StreamHandler()
     ]
 )
@@ -129,7 +133,7 @@ class DocumentProcessor:
     
     def __init__(self, ollama_client: Optional[OllamaClient] = None):
         self.ollama = ollama_client or OllamaClient()
-        self.base_dir = Path.home() / "karpathy-kb"
+        self.base_dir = PROJECT_ROOT
         
         # 输出目录
         self.wiki_dir = self.base_dir / "wiki"

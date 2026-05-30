@@ -172,6 +172,6 @@ class KBLinter:
         print("\n✅ 扫描完成。")
 
 if __name__ == "__main__":
-    base_dir = Path(os.environ.get("KB_DIR", Path.home() / "karpathy-kb"))
+    base_dir = Path(os.environ.get("KB_DIR", Path(__file__).resolve().parent.parent))
     linter = KBLinter(base_dir)
     linter.run()

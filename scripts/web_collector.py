@@ -72,7 +72,7 @@ class WebCollector:
     ]
 
     def __init__(self, base_dir: str = None, extra_headers: Dict[str, str] = None):
-        self.base_dir = Path(base_dir or Path.home() / "karpathy-kb")
+        self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent.parent
         self.raw_dir = self.base_dir / "raw" / "webpages"
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.extra_headers = extra_headers or {}

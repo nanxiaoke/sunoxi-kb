@@ -551,7 +551,7 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="最多处理N个文件")
     parser.add_argument("--category", type=str, default="", help="仅处理指定分类")
     parser.add_argument("--force", action="store_true", help="强制重新处理")
-    parser.add_argument("--base-dir", type=str, default=str(Path.home() / "karpathy-kb"),
+    parser.add_argument("--base-dir", type=str, default=str(Path(__file__).resolve().parent.parent),
                         help="项目根目录")
     
     args = parser.parse_args()

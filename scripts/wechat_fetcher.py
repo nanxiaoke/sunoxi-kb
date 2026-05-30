@@ -20,12 +20,16 @@ from urllib.parse import urlparse, parse_qs, urljoin
 import requests
 from bs4 import BeautifulSoup
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
+DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Path.home() / "karpathy-kb" / "logs" / "wechat_fetcher.log"),
+        logging.FileHandler(DEFAULT_LOG_DIR / "wechat_fetcher.log"),
         logging.StreamHandler()
     ]
 )
@@ -47,7 +51,7 @@ class WeChatFetcher:
     
     def __init__(self, base_dir: str = None, user_agent: str = "android"):
         """初始化抓取器"""
-        self.base_dir = Path(base_dir) if base_dir else Path.home() / "karpathy-kb"
+        self.base_dir = Path(base_dir) if base_dir else PROJECT_ROOT
         self.raw_wechat_dir = self.base_dir / "raw" / "wechat_articles"
         self.logs_dir = self.base_dir / "logs"
         

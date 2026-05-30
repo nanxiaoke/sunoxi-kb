@@ -256,3 +256,29 @@ Task D: Import quality for URL, RSS, WeChat, and files.
 - 2026-05-30: Added shared raw-import title cleanup helpers and applied them to URL, RSS, and WeChat raw save paths. Titles and generated filenames now strip common source suffixes before the batch processor sees them.
 - 2026-05-30: Added failed-import recovery metadata and a retry endpoint for raw files. Upload and URL import failures now keep the raw path plus retry hint, and the WebUI shows a retry panel that can re-run processing after model config/dependency fixes.
 - 2026-05-30: RSS and WeChat subscription pages now show source-specific environment guidance. RSS explains outbound feed access, candidate-pool behavior, and retryable network/feed errors; WeChat explains public-search/redirect limitations and recommends direct article URLs when possible.
+
+## Current Planned Task E
+
+Task E: Knowledge maintenance and cleanup.
+
+### Scope
+
+- Detect duplicate or near-duplicate documents.
+- Recommend related documents and missing cross-links.
+- Keep auto-linking conservative and explain why a suggestion is or is not safe to apply.
+- Surface low-quality or repairable documents in maintenance views.
+
+### Task E Subtasks
+
+- [x] Add duplicate document detection to the knowledge association report.
+- [x] Surface duplicate counts in WebUI association and maintenance feedback.
+- [x] Add a focused smoke test for duplicate detection.
+- [ ] Improve low-quality document report visibility in the Docs tab.
+- [ ] Add safer review-first cleanup actions for duplicate groups.
+
+### Implementation Progress
+
+- 2026-05-30: Task E started after Task D first pass completed. First batch adds duplicate detection to the existing association/maintenance pipeline instead of creating a separate maintenance flow.
+- 2026-05-30: Association reports now detect duplicate groups by exact content fingerprint, repeated source URL, and normalized title. Reports include duplicate group count, affected document count, reason, and a conservative keep suggestion based on newest/largest document.
+- 2026-05-30: WebUI association badges and maintenance completion messages now include duplicate group counts so cleanup problems are visible after normal maintenance runs.
+- 2026-05-30: Added `scripts/smoke_association_report.py`, which builds an isolated temporary wiki and verifies duplicate group summary, reason, affected docs, and keep suggestion without touching the real knowledge base.

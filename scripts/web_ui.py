@@ -2722,6 +2722,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 <span class="font-semibold">知识关联报告</span>
                                 <span class="badge badge-sm">文档 {{ associationReport.summary?.docs ?? 0 }}</span>
                                 <span class="badge badge-sm" :class="associationReport.summary?.orphans ? 'badge-warning' : 'badge-success'">孤立 {{ associationReport.summary?.orphans ?? 0 }}</span>
+                                <span class="badge badge-sm" :class="associationReport.summary?.duplicate_groups ? 'badge-warning' : 'badge-success'">重复 {{ associationReport.summary?.duplicate_groups ?? 0 }}</span>
                                 <span class="badge badge-sm" :class="associationReport.summary?.broken_links ? 'badge-error' : 'badge-success'">坏链 {{ associationReport.summary?.broken_links ?? 0 }}</span>
                                 <span class="badge badge-sm">实体 {{ associationReport.summary?.entities ?? 0 }}</span>
                                 <span class="badge badge-sm" :class="associationReport.summary?.auto_link_candidates ? 'badge-warning' : 'badge-success'">可自动补 {{ associationReport.summary?.auto_link_candidates ?? 0 }}</span>
@@ -2735,6 +2736,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         <div v-if="associationReport.orphans?.length" class="mt-2 text-xs opacity-80">
                             <span class="font-semibold text-warning">孤立文档：</span>
                             <span v-for="o in associationReport.orphans.slice(0,3)" :key="o.path" class="mr-2">{{ o.title || o.path }}</span>
+                        </div>
+                        <div v-if="associationReport.duplicate_groups?.length" class="mt-2 text-xs opacity-80">
+                            <span class="font-semibold text-warning">疑似重复：</span>
+                            <span v-for="g in associationReport.duplicate_groups.slice(0,3)" :key="g.type + ':' + g.key" class="mr-2">{{ g.reason }} · {{ g.doc_count }}篇 · 建议保留 {{ g.keep_suggestion }}</span>
                         </div>
                         <div v-if="associationReport.auto_link_candidates?.length" class="mt-2 text-xs opacity-80">
                             <span class="font-semibold text-warning">可自动补链：</span>
@@ -3212,6 +3217,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                         </div>
                                         <div v-if="lastImportResult.maintenance?.summary?.lint" class="text-xs opacity-70 mt-2">
                                             Lint：坏链 {{ lastImportResult.maintenance.summary.lint.broken_links ?? '?' }} · 孤立 {{ lastImportResult.maintenance.summary.lint.orphans ?? '?' }} · 内链 {{ lastImportResult.maintenance.summary.lint.internal_links ?? '?' }}
+                                        </div>
+                                        <div v-if="lastImportResult.maintenance?.summary?.associations" class="text-xs opacity-70 mt-1">
+                                            关联：重复 {{ lastImportResult.maintenance.summary.associations.duplicate_groups ?? 0 }} · 可补链 {{ lastImportResult.maintenance.summary.associations.auto_link_candidates ?? 0 }} · 推荐 {{ lastImportResult.maintenance.summary.associations.recommendation_only_links ?? 0 }}
                                         </div>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
@@ -5246,7 +5254,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         maintenanceReport.value = report;
                         const lint = report.summary?.lint || {};
                         const model = report.summary?.model || {};
-                        const msg = `维护完成：模型 ${model.model || 'local'} ${model.status || ''}，坏链 ${lint.broken_links ?? '?'}，孤立页 ${lint.orphans ?? '?'}，真实文档 ${report.summary?.real_wiki_docs ?? '?'}`;
+                        const assoc = report.summary?.associations || {};
+                        const msg = `维护完成：模型 ${model.model || 'local'} ${model.status || ''}，坏链 ${lint.broken_links ?? '?'}，孤立页 ${lint.orphans ?? '?'}，重复组 ${assoc.duplicate_groups ?? '?'}，真实文档 ${report.summary?.real_wiki_docs ?? '?'}`;
                         showToast(msg, report.status === 'ok' ? 'success' : 'warning', 6000);
                         await loadDocs();
                         if(activeTab.value === 'graph') await nextTick(() => initGraph());

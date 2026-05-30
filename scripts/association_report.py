@@ -11,9 +11,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -75,6 +77,140 @@ def normalize_related(doc: Dict[str, Any]) -> Dict[str, Any]:
         "score": doc.get("score", 0),
         "shared_entities": doc.get("shared_entities", []),
     }
+
+
+def _normalize_dedupe_key(value: str) -> str:
+    value = re.sub(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", lambda m: m.group(2) or m.group(1), value or "")
+    value = value.lower()
+    value = re.sub(r"[^\w\u4e00-\u9fff]+", "", value, flags=re.UNICODE)
+    return value.strip()
+
+
+def _extract_source_key(content: str) -> str:
+    patterns = [
+        r"^source:\s*[\"']?(.+?)[\"']?\s*$",
+        r"^url:\s*[\"']?(.+?)[\"']?\s*$",
+        r"^>\s*\*\*来源\*\*:\s*(.+?)\s*$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, content, flags=re.MULTILINE)
+        if match:
+            value = match.group(1).strip()
+            if value and value.lower() not in {"unknown", "none", "n/a"}:
+                return value
+    return ""
+
+
+def _knowledge_body_for_duplicate(content: str) -> str:
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            content = parts[2]
+    for marker in ["## 🔗 相关文档", "## 📄 原始内容预览"]:
+        idx = content.find(marker)
+        if idx >= 0:
+            content = content[:idx]
+    lines = []
+    for line in content.splitlines():
+        if line.lstrip().startswith(">"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _content_fingerprint(content: str) -> str:
+    body = _knowledge_body_for_duplicate(content)
+    normalized = re.sub(r"\s+", "", body.lower())
+    normalized = re.sub(r"[^\w\u4e00-\u9fff]+", "", normalized, flags=re.UNICODE)
+    if len(normalized) < 120:
+        return ""
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+
+
+def _duplicate_doc_row(info: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    return {
+        "path": info.get("path"),
+        "title": info.get("title"),
+        "category": info.get("category"),
+        "file_size": info.get("file_size", 0),
+        "modified_time": info.get("modified_time", 0),
+        "reason": reason,
+    }
+
+
+def detect_duplicate_groups(base_dir: Path, docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Detect exact-title/source/content duplicates without mutating documents."""
+    wiki_dir = base_dir / "wiki"
+    buckets: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+        "title": defaultdict(list),
+        "source": defaultdict(list),
+        "content": defaultdict(list),
+    }
+
+    for info in docs:
+        path = info.get("path") or ""
+        file_path = wiki_dir / path
+        content = ""
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            content = ""
+
+        title_key = _normalize_dedupe_key(str(info.get("title") or ""))
+        if title_key:
+            buckets["title"][title_key].append(info)
+
+        source_key = _extract_source_key(content)
+        if source_key:
+            buckets["source"][source_key].append(info)
+
+        content_key = _content_fingerprint(content)
+        if content_key:
+            buckets["content"][content_key].append(info)
+
+    groups = []
+    seen_signatures = set()
+    priority = {"content": 3, "source": 2, "title": 1}
+    labels = {
+        "content": "内容完全一致",
+        "source": "来源URL一致",
+        "title": "标题一致",
+    }
+
+    for kind in ["content", "source", "title"]:
+        for key, items in buckets[kind].items():
+            unique = {i.get("path"): i for i in items if i.get("path")}
+            if len(unique) < 2:
+                continue
+            paths = tuple(sorted(unique.keys()))
+            signature = (kind, paths)
+            if signature in seen_signatures:
+                continue
+            # If a stronger duplicate group already covers the same docs, skip the weaker one.
+            weaker_duplicate = False
+            for existing in groups:
+                existing_paths = tuple(sorted(d.get("path") for d in existing.get("docs", [])))
+                if existing_paths == paths and priority.get(existing.get("type", ""), 0) > priority[kind]:
+                    weaker_duplicate = True
+                    break
+            if weaker_duplicate:
+                continue
+            seen_signatures.add(signature)
+            newest_path = max(
+                unique.values(),
+                key=lambda x: (float(x.get("modified_time") or 0), int(x.get("file_size") or 0)),
+            ).get("path")
+            groups.append({
+                "type": kind,
+                "key": key,
+                "reason": labels[kind],
+                "doc_count": len(unique),
+                "keep_suggestion": newest_path,
+                "docs": [_duplicate_doc_row(info, labels[kind]) for info in sorted(unique.values(), key=lambda x: str(x.get("path") or ""))],
+            })
+
+    groups.sort(key=lambda g: (priority.get(g.get("type", ""), 0), g.get("doc_count", 0)), reverse=True)
+    return groups[:50]
 
 
 def build_outgoing_map(linter: KBLinter) -> Dict[str, set[str]]:
@@ -170,6 +306,9 @@ def build_report(base_dir: Path = KB_DIR, max_related: int = 8) -> Dict[str, Any
         if len(incoming) == 0:
             weak_docs.append(row)
 
+    duplicate_groups = detect_duplicate_groups(base_dir, docs)
+    duplicate_docs = len({doc.get("path") for group in duplicate_groups for doc in group.get("docs", []) if doc.get("path")})
+
     orphans = []
     for rel_path, sources in linter.incoming.items():
         if not is_real_doc(rel_path):
@@ -205,6 +344,8 @@ def build_report(base_dir: Path = KB_DIR, max_related: int = 8) -> Dict[str, Any
             "auto_link_candidates": len(auto_link_candidates),
             "recommendation_only_links": len(recommendation_only_links),
             "low_confidence_links": len(low_confidence_links),
+            "duplicate_groups": len(duplicate_groups),
+            "duplicate_docs": duplicate_docs,
         },
         "orphans": orphans,
         "weak_docs": weak_docs,
@@ -215,6 +356,7 @@ def build_report(base_dir: Path = KB_DIR, max_related: int = 8) -> Dict[str, Any
         "auto_link_candidates": sorted(auto_link_candidates, key=lambda x: x.get("score", 0), reverse=True)[:50],
         "recommendation_only_links": sorted(recommendation_only_links, key=lambda x: x.get("score", 0), reverse=True)[:50],
         "low_confidence_links": sorted(low_confidence_links, key=lambda x: x.get("score", 0), reverse=True)[:50],
+        "duplicate_groups": duplicate_groups,
         "broken_links": linter.broken_links,
     }
     return report

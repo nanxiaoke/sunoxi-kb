@@ -12,7 +12,8 @@ import argparse
 import logging
 import re
 import sys
-from dataclasses import dataclass, field
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -174,10 +175,64 @@ def run(base_dir: Path, rebuild: bool) -> int:
     return 0
 
 
+def run_synthetic_upload_case() -> int:
+    """Check that newly imported/upload-style wiki pages are searchable and answerable."""
+    with tempfile.TemporaryDirectory(prefix="kb-search-qa-") as tmp:
+        base_dir = Path(tmp)
+        wiki_dir = base_dir / "wiki" / "uploads"
+        wiki_dir.mkdir(parents=True)
+        (wiki_dir / "uploaded_model_routing_note.md").write_text(
+            """---
+title: Uploaded Model Routing Note
+category: uploads
+---
+# Uploaded Model Routing Note
+
+> **来源**: uploaded-test.txt
+> **提取方法**: synthetic smoke
+> **文件哈希**: deadbeef
+
+## 摘要
+上传文档说明 online_only 环境必须走 DeepSeek provider，不能回退到本地 Gemma。
+
+## 关键点
+1. online_only 模式只允许在线 provider。
+2. 维护和上传处理都不能触发本地 Gemma。
+
+## 📄 原始内容预览
+
+在纯在线部署里，上传文件后的结构化处理需要使用 DeepSeek provider。
+如果环境配置为 online_only，系统必须阻止 Gemma 或 Ollama 被调用。
+这个规则用于避免没有本地模型的服务器在上传文件时卡住。
+""",
+            encoding="utf-8",
+        )
+
+        searcher = WikiSearcher(base_dir)
+        searcher.build_index(rebuild=True)
+        qa = KnowledgeBaseQA(base_dir)
+        case = SmokeCase(
+            query="上传文档 online_only 会不会调用 Gemma",
+            title_any=("Uploaded Model Routing Note",),
+            answer_all=("online_only", "DeepSeek", "Gemma"),
+            forbidden=("文件哈希", "提取方法", "deadbeef"),
+        )
+
+        failures = check_search(searcher, case) + check_qa(qa, case)
+        if failures:
+            print("FAIL synthetic-upload")
+            for failure in failures:
+                print(f"  - {failure}")
+            return 1
+        print("PASS synthetic-upload -> Uploaded Model Routing Note")
+        return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-dir", type=Path, default=BASE_DIR, help="KB project root")
     parser.add_argument("--rebuild", action="store_true", help="rebuild search_index.json before checks")
+    parser.add_argument("--skip-synthetic", action="store_true", help="skip synthetic uploaded-document case")
     parser.add_argument("--verbose", action="store_true", help="show underlying search/QA logs")
     args = parser.parse_args()
 
@@ -187,7 +242,10 @@ def main() -> int:
     )
     logging.getLogger().setLevel(logging.INFO if args.verbose else logging.WARNING)
     logging.getLogger("jieba").setLevel(logging.WARNING)
-    return run(args.base_dir.resolve(), rebuild=args.rebuild)
+    status = run(args.base_dir.resolve(), rebuild=args.rebuild)
+    if not args.skip_synthetic:
+        status = max(status, run_synthetic_upload_case())
+    return status
 
 
 if __name__ == "__main__":

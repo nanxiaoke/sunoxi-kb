@@ -5275,20 +5275,30 @@ def health():
 #  Main
 # ═══════════════════════════════════════════════════════════════════
 
+def _configure_console_output():
+    """Avoid startup crashes on Windows consoles using legacy encodings."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="replace")
+            except Exception:
+                pass
+
+
 def main():
+    _configure_console_output()
+
     parser = argparse.ArgumentParser(description="Sunoxi知识库 Web UI")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address")
     parser.add_argument("--port", type=int, default=5080, help="Listen port")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     args = parser.parse_args()
 
-    print(f"""
-╔══════════════════════════════════════════════╗
-║   ✦ Sunoxi 知识库 Web UI                   ║
-║   地址: http://{args.host}:{args.port}              ║
-║   按 Ctrl+C 停止                             ║
-╚══════════════════════════════════════════════╝
-""")
+    print()
+    print("Sunoxi KB Web UI")
+    print(f"URL: http://{args.host}:{args.port}")
+    print("Press Ctrl+C to stop")
+    print()
     app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
 
 

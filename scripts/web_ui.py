@@ -2563,13 +2563,17 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <div :class="['chat-bubble shadow-sm', msg.role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-ai']">
                                 <div v-if="msg.role === 'user'" class="whitespace-pre-wrap">{{ msg.content }}</div>
                                 <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-                                <div v-if="msg.role === 'ai' && (msg.latency || msg.cache_hit || msg.citations?.length || msg.diagnostics?.query_tokens?.length)" class="mt-3 flex flex-wrap gap-2 text-xs opacity-70">
+                                <div v-if="msg.role === 'ai' && (msg.latency || msg.cache_hit || msg.citations?.length || msg.diagnostics?.query_tokens?.length || msg.llm?.status)" class="mt-3 flex flex-wrap gap-2 text-xs opacity-70">
                                     <span v-if="msg.latency" class="badge badge-ghost badge-sm">⏱ {{ msg.latency }}s</span>
                                     <span v-if="msg.cache_hit" class="badge badge-success badge-sm">缓存命中</span>
                                     <span v-if="msg.citations?.length" class="badge badge-info badge-sm">{{ msg.citations.length }} 个引用</span>
                                     <span v-if="msg.answer_mode" class="badge badge-outline badge-sm">{{ msg.answer_mode === 'extractive' ? '极速答案' : '模型生成' }}</span>
-                                    <span v-if="msg.llm?.provider" class="badge badge-outline badge-sm">{{ msg.llm.provider }} / {{ msg.llm.model }}</span>
+                                    <span v-if="msg.llm?.provider" :class="['badge badge-sm', msg.llm.status === 'error' ? 'badge-error' : 'badge-outline']">{{ msg.llm.provider }} / {{ msg.llm.model }}</span>
+                                    <span v-if="msg.llm?.fallback_from" class="badge badge-warning badge-sm">fallback {{ msg.llm.fallback_from }} → {{ msg.llm.fallback_to }}</span>
                                     <span v-if="msg.diagnostics?.query_tokens?.length" class="badge badge-outline badge-sm">{{ msg.diagnostics.query_tokens.slice(0, 4).join(' · ') }}</span>
+                                </div>
+                                <div v-if="msg.llm?.status === 'error' && msg.llm?.error" class="alert alert-warning py-2 px-3 mt-3 text-xs">
+                                    <span class="break-all">模型调用失败：{{ msg.llm.error }}</span>
                                 </div>
                                 
                                 <!-- Sources Cards -->

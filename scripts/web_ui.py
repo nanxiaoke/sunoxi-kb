@@ -2943,6 +2943,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             </button>
                         </div>
                     </div>
+                    <div class="alert border border-info/30 bg-info/10 text-sm mb-5">
+                        <div>
+                            <div class="font-semibold">环境说明</div>
+                            <div class="opacity-80 mt-1">RSS同步需要服务器能访问订阅源URL；同步结果先进入候选池，不会直接写入知识库。网络受限、Feed格式异常或超时会记录为错误，可稍后重试。</div>
+                        </div>
+                    </div>
                     <div v-if="rssSyncResult" class="alert alert-info mb-5 text-sm">
                         <div v-if="!syncingRss">
                             RSS同步: {{rssSyncResult.new}} 新 / {{rssSyncResult.skipped}} 跳过 / {{rssSyncResult.errors}} 错误
@@ -3010,6 +3016,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         <button class="btn btn-sm btn-outline rounded-full" @click="loadWechatSources" :disabled="loadingWechatSources">
                             <span v-if="loadingWechatSources" class="loading loading-spinner loading-xs mr-1"></span>刷新订阅
                         </button>
+                    </div>
+                    <div class="alert border border-warning/30 bg-warning/10 text-sm mb-5">
+                        <div>
+                            <div class="font-semibold">环境说明</div>
+                            <div class="opacity-80 mt-1">公众号历史发现依赖公开搜索/跳转页，受验证页和反爬影响较大；指定文章URL通常更稳定。发现结果会进入候选池，需要人工确认后再导入。</div>
+                        </div>
                     </div>
                     <div class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
                         <div class="card-body p-4 grid md:grid-cols-4 gap-3">

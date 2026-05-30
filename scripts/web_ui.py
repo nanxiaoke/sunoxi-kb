@@ -1221,6 +1221,12 @@ def repair_document_quality(relpath: str):
         new_text = _replace_section(new_text, '🏷️ 实体与概念', sections['entities'])
     changed = new_text != text
     if changed and not dry_run:
+        new_text = _upsert_frontmatter_mapping(new_text, "quality_repair", {
+            "method": "rule_based",
+            "issues": before.get("issues", []),
+            "status": "ok",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
         wiki_file.write_text(new_text, encoding="utf-8")
         _rebuild_index()
     after = _quality_status_for_content(new_text)
@@ -1828,6 +1834,12 @@ def repair_all_quality():
         if 'entities_placeholder' in q['issues']:
             new_text = _replace_section(new_text, '🏷️ 实体与概念', sections['entities'])
         if new_text != text:
+            new_text = _upsert_frontmatter_mapping(new_text, "quality_repair", {
+                "method": "rule_based",
+                "issues": q.get("issues", []),
+                "status": "ok",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            })
             f.write_text(new_text, encoding="utf-8")
         results.append({"path": str(rel), "before": q, "after": _quality_status_for_content(new_text)})
         if len(results) >= limit:

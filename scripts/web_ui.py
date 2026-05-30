@@ -936,12 +936,15 @@ def search():
     results = []
     keyword_scores = {}
     keyword_meta = {}
+    keyword_query_tokens = []
 
     # Keyword search
     if mode in ("keyword", "hybrid"):
         try:
             searcher = _get_searcher()
             raw = searcher.search(q, limit=limit * 2)
+            if raw:
+                keyword_query_tokens = raw[0].get("query_tokens") or []
             for item in raw:
                 doc_path = item.get("path", "")
                 if doc_path:
@@ -1008,6 +1011,7 @@ def search():
         "diagnostics": {
             "keyword_hits": len(keyword_scores),
             "semantic_hits": len(semantic_scores),
+            "query_tokens": keyword_query_tokens,
         },
         "total": len(results),
         "results": results,

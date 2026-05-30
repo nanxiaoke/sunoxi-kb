@@ -73,6 +73,12 @@ Windows 兼容入口：
 
 说明：`packaging/common/` 是跨平台主入口，`packaging/windows/` 只保留兼容包装。首次启动是空知识库，需要通过 WebUI 或脚本导入文章。
 
+默认依赖只覆盖 WebUI、在线模型、候选池、RSS/URL/文件导入等核心功能。语义向量依赖较大，需要时再安装：
+
+```bash
+./packaging/common/install_deps.sh --with-embeddings
+```
+
 ### 在线模型密钥
 
 在线模型 API Key 不保存在 WebUI 或 `llm_runtime.yaml` 中。默认使用用户级环境文件：

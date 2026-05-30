@@ -71,6 +71,7 @@ karpathy-kb/
 
 - The deployment runs from the git checkout directory.
 - `packaging/common/install_deps.sh` creates `.venv` under the checkout root and installs `requirements.txt`.
+- `packaging/common/install_deps.sh --with-embeddings` additionally installs `requirements-embeddings.txt` for semantic vector rebuilds.
 - `packaging/common/configure_key.sh` writes `config/llm.env`.
 - `packaging/common/start_webui.sh` loads `config/llm.env` into the current process environment, starts `scripts/web_ui.py`, and opens `http://127.0.0.1:5080`.
 - `packaging/windows/*.sh` are compatibility wrappers around `packaging/common/*.sh`.
@@ -91,6 +92,7 @@ karpathy-kb/
 - [x] Add Windows git deployment documentation.
 - [ ] Test on a real Windows host with Python installed.
 - [x] Add Linux green deployment through the same POSIX `.sh` scripts.
+- [x] Split heavyweight embedding dependencies out of default green deployment install.
 
 ## Acceptance Criteria For Windows Git Deployment V1
 

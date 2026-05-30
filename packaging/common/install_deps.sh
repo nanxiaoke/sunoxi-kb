@@ -11,14 +11,34 @@ fi
 
 VENV="$PROJECT_ROOT/.venv"
 REQ="$PROJECT_ROOT/requirements.txt"
+EMBEDDINGS_REQ="$PROJECT_ROOT/requirements-embeddings.txt"
 PYTHON_BIN=${PYTHON_BIN:-python}
+INSTALL_EMBEDDINGS=0
+FORCE=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --force)
+      FORCE=1
+      shift
+      ;;
+    --with-embeddings)
+      INSTALL_EMBEDDINGS=1
+      shift
+      ;;
+    *)
+      echo "Usage: ./packaging/common/install_deps.sh [--force] [--with-embeddings]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [ ! -f "$REQ" ]; then
   echo "requirements.txt not found: $REQ" >&2
   exit 1
 fi
 
-if [ "${1:-}" = "--force" ] && [ -d "$VENV" ]; then
+if [ "$FORCE" = "1" ] && [ -d "$VENV" ]; then
   rm -rf "$VENV"
 fi
 
@@ -56,5 +76,13 @@ fi
 
 "$VENV_PY" -m pip install --upgrade pip
 "$VENV_PY" -m pip install -r "$REQ"
+
+if [ "$INSTALL_EMBEDDINGS" = "1" ]; then
+  if [ ! -f "$EMBEDDINGS_REQ" ]; then
+    echo "Optional embeddings requirements not found: $EMBEDDINGS_REQ" >&2
+    exit 1
+  fi
+  "$VENV_PY" -m pip install -r "$EMBEDDINGS_REQ"
+fi
 
 echo "Dependencies installed in $VENV"

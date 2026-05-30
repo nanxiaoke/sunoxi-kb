@@ -2140,7 +2140,7 @@ def categories():
 def run_maintenance():
     """Run the wiki-as-code maintenance pipeline: link → lint → reindex → embeddings."""
     data = request.get_json(silent=True) or {}
-    update_embeddings = data.get("update_embeddings", True)
+    update_embeddings = data.get("update_embeddings", False)
     try:
         from maintenance import KBMaintenance
         maint = KBMaintenance(KB_DIR, update_embeddings=bool(update_embeddings), ollama_model=data.get("ollama_model", "gemma4:e4b"))

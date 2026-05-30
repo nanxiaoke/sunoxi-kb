@@ -1,0 +1,5 @@
+# Optional semantic embedding dependencies.
+#
+# Install only when you need scripts/embeddings.py or maintenance with
+# update_embeddings=true. These packages may download large ML runtimes.
+sentence-transformers>=2.7.0

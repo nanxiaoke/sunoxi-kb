@@ -1571,8 +1571,10 @@ def stats():
     wiki_files = list(wiki_dir.rglob("*.md"))
     real_wiki_files = [f for f in wiki_files if not _is_generated_wiki_page(f.relative_to(wiki_dir))]
     generated_wiki_files = [f for f in wiki_files if _is_generated_wiki_page(f.relative_to(wiki_dir))]
-    raw_files = list(raw_dir.rglob("*"))
-    raw_files = [f for f in raw_files if f.is_file()]
+    raw_files = [
+        f for f in raw_dir.rglob("*")
+        if f.is_file() and not any(part.startswith(".") for part in f.relative_to(raw_dir).parts)
+    ]
 
     categories = {}
     for f in real_wiki_files:

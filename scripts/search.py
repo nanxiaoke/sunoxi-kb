@@ -13,6 +13,13 @@ from typing import Dict, List, Set, Tuple, Optional, Any
 from collections import defaultdict
 import argparse
 
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # 尝试导入jieba（增强中文分词）
 try:
     import jieba
@@ -20,13 +27,6 @@ try:
 except ImportError:
     JIEBA_AVAILABLE = False
     logger.warning("jieba未安装，使用简单分词模式（安装: pip install jieba）")
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 class WikiSearcher:
     """Wiki知识库搜索器"""

@@ -2856,8 +2856,24 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
                     <!-- Hierarchical Document Browser -->
                     <div v-if="loadingDocs" class="flex justify-center py-12"><span class="loading loading-spinner loading-lg text-primary"></span></div>
+                    <div v-if="!loadingDocs && qualityBadCount" class="alert border border-warning/30 bg-warning/10 text-sm mb-4">
+                        <div class="w-full">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <div class="font-semibold">质量待修复文档 {{ qualityBadCount }} 篇</div>
+                                    <div class="opacity-75 mt-1">主要问题：{{ qualityIssueSummary || '摘要、关键点或实体信息不完整' }}</div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-xs btn-outline" @click="qualityOnly = !qualityOnly">{{ qualityOnly ? '查看全部' : '只看待修复' }}</button>
+                                    <button class="btn btn-xs btn-warning" @click="repairAllQuality" :disabled="repairingQuality">
+                                        <span v-if="repairingQuality" class="loading loading-spinner loading-xs"></span>一键修复
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
-                    <div v-else class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4 min-h-[26rem]">
+                    <div v-if="!loadingDocs" class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4 min-h-[26rem]">
                         <!-- Folder Tree -->
                         <aside class="card bg-base-200 border border-base-300 rounded-2xl overflow-hidden">
                             <div class="px-4 py-3 border-b border-base-300 flex items-center justify-between">
@@ -2885,6 +2901,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 </div>
                                 <div class="flex gap-2 items-center">
                                     <span v-if="qualityBadCount" class="badge badge-warning badge-sm">{{ qualityBadCount }} 待修复</span>
+                                    <button v-if="qualityBadCount" class="btn btn-xs btn-outline" @click="qualityOnly = !qualityOnly">{{ qualityOnly ? '全部文档' : '只看待修复' }}</button>
                                     <button v-if="qualityBadCount" class="btn btn-xs btn-warning" @click="repairAllQuality" :disabled="repairingQuality">
                                         <span v-if="repairingQuality" class="loading loading-spinner loading-xs"></span>一键修复质量
                                     </button>
@@ -2908,10 +2925,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     </div>
                                     <div class="hidden md:flex items-center gap-2 text-xs opacity-50 shrink-0">
                                         <span class="badge badge-sm badge-outline">{{ doc.type }}</span>
-                                        <span v-if="doc.quality && !doc.quality.ok" class="badge badge-warning badge-sm" :title="doc.quality.issues.join(', ')">质量待修复</span>
+                                        <span v-if="doc.quality && !doc.quality.ok" class="badge badge-warning badge-sm" :title="issueText(doc.quality.issues)">质量待修复</span>
                                         <span v-else class="badge badge-success badge-sm">质量OK</span>
                                         <span>{{ formatBytes(doc.size) }}</span>
                                         <span>{{ formatDate(doc.mtime) }}</span>
+                                    </div>
+                                    <div v-if="doc.quality && !doc.quality.ok" class="hidden lg:flex flex-wrap gap-1 shrink-0 max-w-xs">
+                                        <span v-for="issue in doc.quality.issues" :key="doc.relpath + issue" class="badge badge-xs badge-outline badge-warning">{{ issueLabel(issue) }}</span>
                                     </div>
                                     <button v-if="doc.quality && !doc.quality.ok" @click.stop="repairDocQuality(doc.relpath)" class="btn btn-xs btn-warning opacity-80 md:opacity-0 group-hover:opacity-100 transition-opacity" title="修复摘要/关键点/实体">修复</button>
                                     <button @click.stop="deleteDoc(doc.relpath)" class="btn btn-xs btn-ghost btn-circle text-error opacity-60 md:opacity-0 group-hover:opacity-100 transition-opacity" title="删除">
@@ -4675,6 +4695,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const fetchUrlError = ref('');
                 const fetchUrlSuccess = ref(false);
                 const failedImports = ref([]);
+                const qualityOnly = ref(false);
+                const qualityIssueLabels = {
+                    summary_placeholder: '摘要缺失',
+                    keypoints_placeholder: '关键点缺失',
+                    entities_placeholder: '实体缺失',
+                    quality_scan_failed: '扫描失败',
+                };
+                const issueLabel = (issue) => qualityIssueLabels[issue] || issue;
+                const issueText = (issues) => (issues || []).map(issueLabel).join(' / ');
 
                 const loadDocs = async () => {
                     loadingDocs.value = true;
@@ -4710,11 +4739,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const filteredDocs = computed(() => {
                     const q = docSearchText.value.trim().toLowerCase();
                     let list = docs.value.slice().sort((a, b) => b.mtime - a.mtime);
+                    if(qualityOnly.value) list = list.filter(d => d.quality && !d.quality.ok);
                     if(!q) return list;
                     return list.filter(d => d.name.toLowerCase().includes(q) || d.relpath.toLowerCase().includes(q) || (d.type || '').toLowerCase().includes(q));
                 });
 
-                watch([docSearchText, selectedDocFolder], () => { docsPage.value = 1; });
+                watch([docSearchText, selectedDocFolder, qualityOnly], () => { docsPage.value = 1; });
 
                 const folderRows = computed(() => {
                     const dirs = new Map();
@@ -4752,6 +4782,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 });
 
                 const qualityBadCount = computed(() => docs.value.filter(d => d.quality && !d.quality.ok).length);
+                const qualityIssueSummary = computed(() => {
+                    const counts = {};
+                    docs.value.forEach(d => (d.quality?.issues || []).forEach(i => { counts[i] = (counts[i] || 0) + 1; }));
+                    return Object.entries(counts)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([issue, count]) => `${issueLabel(issue)} ${count}`)
+                        .join('，');
+                });
 
                 const repairDocQuality = async (path) => {
                     repairingQuality.value = true;
@@ -5764,7 +5802,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     toasts, 
                     chatInput, chatHistory, isWaiting, submitChat, chatAnswerMode, renderMarkdown, ask,
                     qaProviderChain,
-                    docs, filteredDocs, folderRows, visibleDocs, pagedVisibleDocs, docsPage, docsPageSize, docsTotalPages, selectedDocFolder, loadingDocs, docSearchText, loadDocs, qualityBadCount, repairingQuality, repairDocQuality, repairAllQuality, deleteDoc,
+                    docs, filteredDocs, folderRows, visibleDocs, pagedVisibleDocs, docsPage, docsPageSize, docsTotalPages, selectedDocFolder, loadingDocs, docSearchText, loadDocs, qualityBadCount, qualityIssueSummary, qualityOnly, issueLabel, issueText, repairingQuality, repairDocQuality, repairAllQuality, deleteDoc,
                     isMaintaining, maintenanceReport, runMaintenance,
                     candidates, candidateGroups, candidateSummary, candidateTierFilter, candidateTypeFilter, candidateIncludeSkipped, loadingCandidates, importingCandidateId, translatingCandidateId, batchTranslatingPreview, batchImportingA, batchImportLimit, batchImportRetries, batchImportJob, loadBatchImportStatus, batchSkippingCandidates, candidateEditOpen, savingCandidateEdit, candidateEditItem, candidateEditOriginalTitle, candidateEditForm, lastImportResult, openLastImportedDoc, searchLastImported, tierBadgeClass, tierLabel, tierCardClass, formatCandidateDate, loadCandidates, previewCandidate, translateCandidate, batchTranslatePreview, batchImportA, editCandidate, closeCandidateEdit, saveCandidateEdit, batchSkipLowQuality, importCandidate, skipCandidate, restoreCandidate,
                     wechatSources, loadingWechatSources, savingWechatSource, discoveringWechat, wechatDiscoveryResult, newWechatSource, discoverForm, loadWechatSources, saveWechatSource, discoverWechat,

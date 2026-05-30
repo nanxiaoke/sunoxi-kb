@@ -273,7 +273,7 @@ Task E: Knowledge maintenance and cleanup.
 - [x] Add duplicate document detection to the knowledge association report.
 - [x] Surface duplicate counts in WebUI association and maintenance feedback.
 - [x] Add a focused smoke test for duplicate detection.
-- [ ] Improve low-quality document report visibility in the Docs tab.
+- [x] Improve low-quality document report visibility in the Docs tab.
 - [ ] Add safer review-first cleanup actions for duplicate groups.
 
 ### Implementation Progress
@@ -282,3 +282,4 @@ Task E: Knowledge maintenance and cleanup.
 - 2026-05-30: Association reports now detect duplicate groups by exact content fingerprint, repeated source URL, and normalized title. Reports include duplicate group count, affected document count, reason, and a conservative keep suggestion based on newest/largest document.
 - 2026-05-30: WebUI association badges and maintenance completion messages now include duplicate group counts so cleanup problems are visible after normal maintenance runs.
 - 2026-05-30: Added `scripts/smoke_association_report.py`, which builds an isolated temporary wiki and verifies duplicate group summary, reason, affected docs, and keep suggestion without touching the real knowledge base.
+- 2026-05-30: Docs tab quality visibility improved with a warning summary, issue breakdown, `only repairable` filter, and per-document issue labels for missing summaries, keypoints, entities, or scan failures.

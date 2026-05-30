@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task A in progress as of 2026-05-30.
+Status: Task B in progress as of 2026-05-30.
 
 ## Decision
 
@@ -164,3 +164,28 @@ features:
 - 2026-05-30: Improved upload processing failures so missing key/provider/LLM errors are returned in the API response instead of only appearing in backend logs.
 - 2026-05-30: Added `docs/webui-settings-and-upload.md` and linked it from the README.
 - 2026-05-30: Task A follow-up fixes: chat bubble bot name now uses configured branding; maintenance LLM check now follows the current `maintenance_links` flow instead of hardcoded local Ollama; document retranslation action remains clickable so unavailable model/missing-key errors are shown explicitly.
+
+## Current Planned Task B
+
+Task B: Search and QA quality optimization.
+
+### Scope
+
+- Improve Chinese and mixed Chinese/English keyword recall.
+- Make query cleaning, token expansion, and ranking easier to inspect.
+- Improve QA context selection so answers cite stronger source snippets.
+- Make extractive vs LLM answer mode behavior clearer in WebUI responses.
+- Add focused smoke cases for common questions such as Harness, 横纵分析法, model switching, and uploaded documents.
+
+### Task B Subtasks
+
+- [ ] Audit current `WikiSearcher.search()` scoring and tokenization behavior.
+- [ ] Add query diagnostics in search/QA responses for debugging ranking problems.
+- [ ] Improve query token expansion for Chinese compound terms and mixed English terms.
+- [ ] Improve result snippets so matched content is visible, not only document opening text.
+- [ ] Improve QA context scoring and citations.
+- [ ] Add focused search/QA smoke tests against the current wiki corpus.
+
+### Implementation Progress
+
+- 2026-05-30: Task B started after Task A follow-up fixes. Initial inspection target: `scripts/search.py`, `scripts/qa.py`, and `/api/search` response shape.

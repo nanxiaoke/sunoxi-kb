@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task B in progress as of 2026-05-30.
+Status: Task C in progress as of 2026-05-30.
 
 ## Decision
 

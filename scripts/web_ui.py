@@ -246,6 +246,16 @@ def _feature_disabled_response(name: str):
     return jsonify({"error": f"feature disabled: {name}", "feature": name}), 403
 
 
+def _import_recovery(raw_path: str, error: str = "") -> Dict[str, Any]:
+    return {
+        "can_retry": bool(raw_path),
+        "raw_path": raw_path,
+        "retry_endpoint": "/api/documents/retry-import",
+        "hint": "原始文件已保留，可修正模型配置或依赖后重新处理。",
+        "error": error or None,
+    }
+
+
 def _is_generated_wiki_page(relpath: Path) -> bool:
     """Return True for generated navigation/index pages, not real knowledge articles."""
     name = relpath.name
@@ -730,12 +740,14 @@ def upload_document():
                             item["llm"] = meta.get("llm") if isinstance(meta.get("llm"), dict) else None
                     if not ok:
                         item["error"] = str(msg)
+                        item["recovery"] = _import_recovery(r["saved_as"], str(msg))
                     processed.append(item)
                 except Exception as e:
                     logger.warning(f"Auto-process failed for {filepath}: {e}", exc_info=True)
                     item["stage"] = "auto_process_error"
                     item["error"] = str(e)
                     item["message"] = f"处理失败: {e}"
+                    item["recovery"] = _import_recovery(r["saved_as"], str(e))
                     processed.append(item)
         if any(p.get("processed") for p in processed):
             _rebuild_index()
@@ -745,6 +757,51 @@ def upload_document():
         "results": results,
         "processed": processed if processed else None,
     })
+
+
+@app.route("/api/documents/retry-import", methods=["POST"])
+def retry_import_document():
+    """Retry processing an existing raw file after configuration/dependency fixes."""
+    if not (_feature_enabled("upload") or _feature_enabled("url_import")):
+        return _feature_disabled_response("upload")
+    data = request.get_json(silent=True) or {}
+    raw_path = str(data.get("raw_path") or "").strip()
+    if not raw_path:
+        return jsonify({"error": "raw_path is required"}), 400
+    raw_file = (KB_DIR / raw_path).resolve()
+    raw_root = (KB_DIR / "raw").resolve()
+    if not str(raw_file).startswith(str(raw_root)) or not raw_file.exists() or not raw_file.is_file():
+        return jsonify({"error": "raw file not found or outside raw directory"}), 404
+
+    try:
+        importer = _get_importer()
+        ok, msg = importer.process_file(raw_file)
+        payload = {
+            "raw_path": str(raw_file.relative_to(KB_DIR)),
+            "processed": bool(ok),
+            "message": str(msg),
+            "wiki_path": None,
+            "error": None if ok else str(msg),
+        }
+        if ok and msg:
+            wiki_path = Path(str(msg))
+            if not wiki_path.is_absolute():
+                wiki_path = KB_DIR / "wiki" / str(msg)
+            if wiki_path.exists():
+                payload["wiki_path"] = str(wiki_path.relative_to(KB_DIR / "wiki"))
+        else:
+            payload["recovery"] = _import_recovery(payload["raw_path"], str(msg))
+        if ok:
+            _rebuild_index()
+        return jsonify(payload), 200 if ok else 500
+    except Exception as e:
+        logger.error(f"Retry import failed for {raw_path}: {e}", exc_info=True)
+        return jsonify({
+            "raw_path": raw_path,
+            "processed": False,
+            "error": str(e),
+            "recovery": _import_recovery(raw_path, str(e)),
+        }), 500
 
 
 @app.route("/api/documents/<path:relpath>", methods=["DELETE"])
@@ -1069,10 +1126,13 @@ def upload_url():
                 result["processed"] = ok_p
                 result["wiki_path"] = str(msg) if ok_p else None
                 result["message"] = msg if not ok_p else None
+                if not ok_p:
+                    result["recovery"] = _import_recovery(result["raw_path"], str(msg))
             except Exception as pe:
                 logger.warning(f"Import failed after fetch: {pe}")
                 result["processed"] = False
                 result["message"] = f"抓取成功但处理失败: {pe}"
+                result["recovery"] = _import_recovery(result["raw_path"], str(pe))
 
         _rebuild_index()
         return jsonify(result)
@@ -2768,6 +2828,26 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <p v-if="fetchUrlSuccess" class="text-success text-sm mt-2">✅ {{ t('docs.fetchSuccess') }}</p>
                         </div>
                     </transition>
+
+                    <div v-if="failedImports.length" class="alert border border-warning/40 bg-warning/10 text-sm mb-4">
+                        <div class="w-full">
+                            <div class="font-semibold">待重试导入</div>
+                            <div class="mt-2 space-y-2">
+                                <div v-for="item in failedImports" :key="item.raw_path" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl bg-base-100/70 border border-base-300 p-3">
+                                    <div class="min-w-0">
+                                        <div class="font-mono text-xs break-all">{{ item.raw_path }}</div>
+                                        <div class="text-xs opacity-70 mt-1">{{ item.error || item.message || item.recovery?.hint || '处理失败，可重试' }}</div>
+                                    </div>
+                                    <div class="flex gap-2 shrink-0">
+                                        <button class="btn btn-xs btn-warning" @click="retryFailedImport(item)" :disabled="item.retrying">
+                                            <span v-if="item.retrying" class="loading loading-spinner loading-xs"></span>重试处理
+                                        </button>
+                                        <button class="btn btn-xs btn-ghost" @click="failedImports = failedImports.filter(x => x !== item)">忽略</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Hierarchical Document Browser -->
                     <div v-if="loadingDocs" class="flex justify-center py-12"><span class="loading loading-spinner loading-lg text-primary"></span></div>
@@ -4574,6 +4654,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const isFetchingUrl = ref(false);
                 const fetchUrlError = ref('');
                 const fetchUrlSuccess = ref(false);
+                const failedImports = ref([]);
 
                 const loadDocs = async () => {
                     loadingDocs.value = true;
@@ -5207,6 +5288,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             showToast('✅ 抓取并导入成功！', 'success');
                             loadDocs();
                         } else {
+                            if(data.recovery?.can_retry) {
+                                failedImports.value.unshift({
+                                    raw_path: data.recovery.raw_path || data.raw_path,
+                                    error: data.message || data.recovery.error,
+                                    recovery: data.recovery,
+                                    retrying: false
+                                });
+                            }
                             showToast(`❌ 抓取成功但处理失败: ${data.message || '未知错误'}`, 'warning');
                         }
                     } catch(e) {
@@ -5245,6 +5334,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     const model = item.llm?.provider ? ` · ${item.llm.provider} / ${item.llm.model || '-'}` : '';
                                     showToast(`已处理 ${item.filename}${model}`, 'success', 7000);
                                 } else {
+                                    if(item.recovery?.can_retry) {
+                                        failedImports.value.unshift({
+                                            raw_path: item.recovery.raw_path || item.raw_path,
+                                            filename: item.filename,
+                                            error: item.error || item.message,
+                                            recovery: item.recovery,
+                                            retrying: false
+                                        });
+                                    }
                                     showToast(`上传成功但处理失败 ${item.filename}: ${item.error || item.message || '未知错误'}`, 'warning', 9000);
                                 }
                             }
@@ -5255,6 +5353,28 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     }
                     if(!summaries.length) showToast("上传请求已发送", "success");
                     loadDocs();
+                };
+
+                const retryFailedImport = async (item) => {
+                    if(!item?.raw_path || item.retrying) return;
+                    item.retrying = true;
+                    try {
+                        const res = await fetch('/api/documents/retry-import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ raw_path: item.raw_path })
+                        });
+                        const data = await res.json();
+                        if(!res.ok || !data.processed) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+                        failedImports.value = failedImports.value.filter(x => x !== item);
+                        showToast(`重试处理成功: ${data.wiki_path || item.raw_path}`, 'success', 7000);
+                        loadDocs();
+                    } catch(e) {
+                        item.error = e.message;
+                        showToast(`重试处理失败: ${e.message}`, 'error', 9000);
+                    } finally {
+                        item.retrying = false;
+                    }
                 };
 
                 const formatBytes = (bytes) => {
@@ -5638,7 +5758,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, restoreLlmBackup, testLlmProvider, objectEntries,
                     addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel,
                     availableProvidersForFlow, addProviderToFlow, removeFlowProvider, moveFlowProvider,
-                    showUrlInput, fetchUrlInput, isFetchingUrl, fetchUrlError, fetchUrlSuccess, fetchUrl
+                    showUrlInput, fetchUrlInput, isFetchingUrl, fetchUrlError, fetchUrlSuccess, fetchUrl, failedImports, retryFailedImport
                 };
             }
         }).mount('#app');

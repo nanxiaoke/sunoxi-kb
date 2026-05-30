@@ -243,7 +243,7 @@ Task D: Import quality for URL, RSS, WeChat, and files.
 - [x] Harden wiki frontmatter quoting for imported documents.
 - [x] Add non-network smoke for import metadata quality.
 - [x] Improve title cleanup across URL/RSS/WeChat/file import paths.
-- [ ] Add clearer failed-import retry/recovery state in WebUI.
+- [x] Add clearer failed-import retry/recovery state in WebUI.
 - [ ] Surface source-specific limitations and disabled-environment guidance in UI.
 
 ### Implementation Progress
@@ -254,3 +254,4 @@ Task D: Import quality for URL, RSS, WeChat, and files.
 - 2026-05-30: Added `scripts/smoke_import_quality.py`, a no-network smoke test with a dirty fake LLM response that verifies category normalization, entity deduplication, tag insertion, and valid YAML frontmatter.
 - 2026-05-30: Extended the same metadata normalization to the batch import path used by uploaded files and URL-imported raw pages. Batch import now cleans title suffixes, normalizes generated category/entities/tags, safely quotes YAML tags, and is covered by the import-quality smoke test.
 - 2026-05-30: Added shared raw-import title cleanup helpers and applied them to URL, RSS, and WeChat raw save paths. Titles and generated filenames now strip common source suffixes before the batch processor sees them.
+- 2026-05-30: Added failed-import recovery metadata and a retry endpoint for raw files. Upload and URL import failures now keep the raw path plus retry hint, and the WebUI shows a retry panel that can re-run processing after model config/dependency fixes.

@@ -13,6 +13,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from processor import DocumentProcessor  # noqa: E402
+from batch_processor import BatchProcessor  # noqa: E402
 
 
 class DirtyLLM:
@@ -32,6 +33,7 @@ class DirtyLLM:
 
 
 def main() -> int:
+    failures = []
     with tempfile.TemporaryDirectory(prefix="kb-import-quality-") as tmp:
         base = Path(tmp)
         raw = base / "raw" / "uploads" / "dirty.txt"
@@ -55,7 +57,6 @@ def main() -> int:
         frontmatter = text.split("---", 2)[1]
         meta = yaml.safe_load(frontmatter)
 
-        failures = []
         if result["category"] != "技术":
             failures.append(f"category not normalized: {result['category']}")
         if result["entities"].count("DeepSeek") != 1:
@@ -67,14 +68,49 @@ def main() -> int:
         if "文件哈希" in text or "提取方法" in text:
             failures.append("metadata noise leaked into wiki")
 
-        if failures:
-            print("FAIL import quality smoke")
-            for failure in failures:
-                print(f"  - {failure}")
-            return 1
+    with tempfile.TemporaryDirectory(prefix="kb-batch-import-quality-") as tmp:
+        base = Path(tmp)
+        raw = base / "raw" / "webpages" / "dirty-web.md"
+        raw.parent.mkdir(parents=True)
+        (base / "wiki").mkdir(parents=True)
+        raw.write_text(
+            "# 标题：  Dirty Web Title - 微信公众平台\n\nDeepSeek、Gemma、Ollama 的导入质量测试。",
+            encoding="utf-8",
+        )
+        bp = BatchProcessor(base)
+        bp._llm_chat = lambda flow, prompt: (
+            """## 摘要
+摘要：  这是批处理导入的质量测试。
 
-        print("PASS import quality smoke -> normalized category/entities/tags/frontmatter")
-        return 0
+## 关键点
+1. 需要稳定分类
+2. 需要实体去重
+
+## 分类
+分类：技术文章 / AI 工具
+
+## 实体
+DeepSeek, Gemma, DeepSeek，Ollama""",
+            {"flow": flow, "provider": "fake", "model": "fake-model", "status": "ok", "duration_sec": 0.01},
+        )
+        wiki_path = bp.process_file({"path": raw, "category": "webpages", "size": raw.stat().st_size})
+        text = wiki_path.read_text(encoding="utf-8") if wiki_path else ""
+        meta = yaml.safe_load(text.split("---", 2)[1]) if text else {}
+        if meta.get("category") != "技术":
+            failures.append(f"batch category not normalized: {meta.get('category')}")
+        if text.count("DeepSeek") < 1 or "DeepSeek，" in text:
+            failures.append("batch entities not normalized")
+        if "微信公众平台" in text.splitlines()[2]:
+            failures.append("batch title suffix not cleaned")
+
+    if failures:
+        print("FAIL import quality smoke")
+        for failure in failures:
+            print(f"  - {failure}")
+        return 1
+
+    print("PASS import quality smoke -> normalized processor/batch metadata and frontmatter")
+    return 0
 
 
 if __name__ == "__main__":

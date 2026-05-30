@@ -31,6 +31,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+ALLOWED_CATEGORIES = ["技术", "学术论文", "笔记", "代码", "教程", "新闻", "文章", "其他"]
+CATEGORY_ALIASES = {
+    "tech": "技术",
+    "technology": "技术",
+    "technologies": "技术",
+    "技术文章": "技术",
+    "工具": "技术",
+    "开源项目": "技术",
+    "paper": "学术论文",
+    "papers": "学术论文",
+    "论文": "学术论文",
+    "research": "学术论文",
+    "note": "笔记",
+    "notes": "笔记",
+    "代码片段": "代码",
+    "code": "代码",
+    "tutorial": "教程",
+    "guide": "教程",
+    "指南": "教程",
+    "news": "新闻",
+    "资讯": "新闻",
+    "article": "文章",
+    "articles": "文章",
+}
+
 
 class BatchProcessor:
     """批量文档处理器（使用统一 LLMService 处理）"""
@@ -139,6 +164,72 @@ class BatchProcessor:
         """Quote a scalar for simple generated YAML frontmatter."""
         text = "" if value is None else str(value)
         return json.dumps(text, ensure_ascii=False)
+
+    def _clean_single_line(self, value: Any, *, fallback: str = "", max_len: int = 180) -> str:
+        text = str(value or "").strip()
+        text = re.sub(r"^```(?:\w+)?|```$", "", text).strip()
+        text = re.sub(r"^\s*[-*•\d.、]+", "", text).strip()
+        text = re.sub(r"^(标题|title|分类|category|摘要|summary|实体|entities|标签|tags)\s*[:：]\s*", "", text, flags=re.I)
+        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`")
+        return (text or fallback)[:max_len].strip()
+
+    def _clean_title(self, raw: Any, fallback: str) -> str:
+        title = self._clean_single_line(raw, fallback=fallback, max_len=120)
+        title = re.sub(r"\s*[-|_]\s*(微信公众号|微信公众平台|知乎专栏|掘金|CSDN博客)\s*$", "", title)
+        return title or fallback
+
+    def _normalize_category(self, raw: Any, raw_category: str = "") -> str:
+        text = self._clean_single_line(raw, fallback="")
+        lowered = text.lower()
+        if text in ALLOWED_CATEGORIES:
+            return text
+        if lowered in CATEGORY_ALIASES:
+            return CATEGORY_ALIASES[lowered]
+        for key, category in CATEGORY_ALIASES.items():
+            if key and (key in lowered or key in text):
+                return category
+        for category in ALLOWED_CATEGORIES:
+            if category in text:
+                return category
+        if raw_category == "codes":
+            return "代码"
+        if raw_category in {"articles", "webpages", "wechat_articles"}:
+            return "文章"
+        if raw_category == "notes":
+            return "笔记"
+        if raw_category == "papers":
+            return "学术论文"
+        return "其他"
+
+    def _normalize_list(self, raw: Any, *, max_items: int = 12, max_len: int = 40) -> List[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            parts = raw
+        else:
+            text = str(raw)
+            text = re.sub(r"^```(?:\w+)?|```$", "", text.strip()).strip()
+            lines = []
+            for line in text.splitlines():
+                line = re.sub(r"^\s*[-*•\d.、]+", "", line).strip()
+                if line:
+                    lines.append(line)
+            parts = []
+            for line in lines or [text]:
+                parts.extend(re.split(r"[,，;；、/|]", line))
+        result = []
+        seen = set()
+        for item in parts:
+            clean = self._clean_single_line(item, max_len=max_len)
+            if not clean or clean in {"无", "无实体", "未提取到实体", "（未提取到实体）", "none", "null"}:
+                continue
+            key = clean.lower()
+            if key not in seen:
+                seen.add(key)
+                result.append(clean)
+            if len(result) >= max_items:
+                break
+        return result
 
     def _parse_simple_frontmatter(self, content: str) -> tuple[Dict[str, Any], str]:
         """轻量解析 YAML frontmatter，支持 title/category/tags/preferred_category。"""
@@ -278,6 +369,7 @@ class BatchProcessor:
                 if m:
                     title = m.group(1).strip()
                     break
+        title = self._clean_title(title, filepath.stem)
         preferred_category = (metadata.get('preferred_category') or metadata.get('category') or '').strip()
         review_tags = metadata.get('tags') or []
         if isinstance(review_tags, str):
@@ -387,23 +479,28 @@ class BatchProcessor:
             tag_entities = ", ".join(str(t) for t in review_tags)
             entities = f"{entities}, {tag_entities}" if entities else tag_entities
         
-        # 清理category
-        category = category.strip().lower()
+        # 清理生成元数据
+        category = self._normalize_category(category, file_info["category"])
+        summary = self._clean_single_line(summary, fallback="（AI生成的摘要）", max_len=700)
+        entities_list = self._normalize_list(entities)
+        tags = self._normalize_list(review_tags)
+        if category not in tags:
+            tags.insert(0, category)
         # 映射到wiki分类目录
         cat_map = {
-            "技术": "technologies", "technology": "technologies",
-            "学术论文": "concepts", "academic_paper": "concepts",
+            "技术": "technologies",
+            "学术论文": "concepts",
             "笔记": "notes", "notes": "notes",
-            "代码": "codes", "code": "codes",
-            "教程": "technologies", "tutorial": "technologies",
-            "新闻": "articles", "news": "articles",
-            "其他": "concepts", "other": "concepts",
-            "文章": "articles", "article": "articles",
+            "代码": "codes",
+            "教程": "technologies",
+            "新闻": "articles",
+            "其他": "concepts",
+            "文章": "articles",
         }
         target_category = cat_map.get(category, wiki_category)
         
         # 5. 生成wiki文件名
-        safe_title = re.sub(r'[^\w\s-]', '', title)[:50]
+        safe_title = re.sub(r'[^\w\s-]', '', title).strip()[:50] or "untitled"
         file_hash = hashlib.md5(content.encode()).hexdigest()[:8]
         wiki_filename = f"{safe_title}_{file_hash}.md"
         
@@ -411,7 +508,8 @@ class BatchProcessor:
         wiki_dir.mkdir(parents=True, exist_ok=True)
         wiki_path = wiki_dir / wiki_filename
         
-        tag_lines = "\n".join([f"  - {t}" for t in ([category] + [str(t) for t in review_tags if str(t) != category])]) or f"  - {category}"
+        tag_lines = "\n".join([f"  - {self._yaml_quote(t)}" for t in tags]) or f"  - {self._yaml_quote(category)}"
+        entities_text = "\n".join([f"- {entity}" for entity in entities_list]) if entities_list else "（未提取到实体）"
         translation_section = ""
         if translated_body:
             translation_section = f"""
@@ -455,7 +553,7 @@ llm:
 
 ## 🏷️ 实体与概念
 
-{entities if entities else "（未提取到实体）"}
+{entities_text}
 
 {translation_section}## 📄 原始内容预览
 

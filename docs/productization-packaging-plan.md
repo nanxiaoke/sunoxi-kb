@@ -93,6 +93,7 @@ karpathy-kb/
 - [ ] Test on a real Windows host with Python installed.
 - [x] Add Linux green deployment through the same POSIX `.sh` scripts.
 - [x] Split heavyweight embedding dependencies out of default green deployment install.
+- [x] Verify a clean Linux clone can install dependencies, configure a key file, start WebUI, and pass `/health`.
 
 ## Acceptance Criteria For Windows Git Deployment V1
 
@@ -119,6 +120,23 @@ PYTHON_BIN=python3 ./packaging/common/install_deps.sh
 ```
 
 The Windows directory remains as a compatibility alias for earlier notes, but the common directory is the preferred cross-platform entrypoint.
+
+## Linux Clean Clone Verification
+
+Verified on 2026-05-30 from `origin/main`.
+
+Result:
+
+- Clean `git clone` succeeded.
+- Runtime directories contained only `.keep` placeholders before first run.
+- `PYTHON_BIN=python3 ./packaging/common/install_deps.sh` created `.venv` and installed default dependencies without pulling Torch/CUDA.
+- `./packaging/common/configure_key.sh --key ...` wrote ignored local `config/llm.env` with mode `600`.
+- Python compile check passed for setup, WebUI, LLM service, search, QA, batch processor, candidate manager, and translator.
+- `./packaging/common/start_webui.sh` started WebUI on a test port.
+- `/health` returned `status=ok`.
+- `/api/stats` returned zero raw/wiki documents in the empty clone.
+- `/api/llm/config` returned 3 providers and 12 flows.
+- `POST /api/llm/mode` successfully applied `local`, `online`, and `hybrid`.
 
 ## Deferred Task: Formal Distribution Packaging (Windows & Linux)
 

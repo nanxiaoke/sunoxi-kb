@@ -20,6 +20,11 @@ from urllib.parse import urlparse, parse_qs, urljoin
 import requests
 from bs4 import BeautifulSoup
 
+try:
+    from import_quality import clean_import_title, safe_import_stem
+except ImportError:
+    from .import_quality import clean_import_title, safe_import_stem
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
 DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -293,15 +298,7 @@ class WeChatFetcher:
         
         # 清理标题（移除公众号名称后缀）
         if article_data["title"]:
-            # 移除常见的" - 公众号名"格式
-            clean_title = article_data["title"]
-            if ' - ' in clean_title:
-                clean_title = clean_title.split(' - ')[0].strip()
-            # 移除常见后缀
-            for suffix in [' | 微信公众平台', ' - 微信公众平台', ' - 微信公众号']:
-                if clean_title.endswith(suffix):
-                    clean_title = clean_title[:-len(suffix)].strip()
-            article_data["title"] = clean_title
+            article_data["title"] = clean_import_title(article_data["title"], fallback="微信公众号文章")
         
         # 提取作者 - 微信公众号常用位置
         author_selectors = [
@@ -453,7 +450,8 @@ class WeChatFetcher:
             
             # 使用标题或URL作为文件名
             if article_data.get("title"):
-                title_slug = "".join(c for c in article_data["title"] if c.isalnum() or c in " -_")[:50]
+                article_data["title"] = clean_import_title(article_data["title"], fallback="微信公众号文章")
+                title_slug = safe_import_stem(article_data["title"], fallback="wechat_article", max_len=50)
                 filename = f"{title_slug}_{url_hash}.md"
             else:
                 filename = f"wechat_article_{url_hash}.md"

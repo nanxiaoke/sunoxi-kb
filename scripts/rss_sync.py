@@ -17,6 +17,11 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from urllib.parse import urlparse
 
+try:
+    from import_quality import clean_import_title, safe_import_stem
+except ImportError:
+    from .import_quality import clean_import_title, safe_import_stem
+
 logger = logging.getLogger(__name__)
 
 # 项目路径。默认跟随当前源码仓库，避免部署到 Windows/Linux 后继续写入 home 下旧路径。
@@ -54,8 +59,9 @@ class Article:
     
     def to_markdown(self) -> str:
         """转换为Markdown格式"""
+        title = clean_import_title(self.title, fallback="RSS文章")
         lines = []
-        lines.append(f"# {self.title}")
+        lines.append(f"# {title}")
         lines.append("")
         
         meta = []
@@ -466,8 +472,8 @@ class RSSManager:
 
     def _save_article(self, article: Article, category: str):
         """保存文章到rss_candidates目录（候选池格式）"""
-        safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_ ]', '', article.title)[:60]
-        safe_title = safe_title.strip().replace(' ', '_')
+        article.title = clean_import_title(article.title, fallback="RSS文章")
+        safe_title = safe_import_stem(article.title, fallback="rss_article", max_len=60)
         
         filename = f"rss_{safe_title}_{article.content_hash}.md"
         filepath = self.candidate_dir / filename

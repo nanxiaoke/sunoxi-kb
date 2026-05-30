@@ -14,6 +14,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from processor import DocumentProcessor  # noqa: E402
 from batch_processor import BatchProcessor  # noqa: E402
+from import_quality import clean_import_title, safe_import_stem  # noqa: E402
 
 
 class DirtyLLM:
@@ -34,6 +35,12 @@ class DirtyLLM:
 
 def main() -> int:
     failures = []
+    title = clean_import_title("标题：  DeepSeek 新能力 - 微信公众平台", fallback="x")
+    if title != "DeepSeek 新能力":
+        failures.append(f"shared title cleanup failed: {title}")
+    if safe_import_stem("DeepSeek 新能力 - 微信公众平台", fallback="x") != "DeepSeek_新能力":
+        failures.append("shared filename stem cleanup failed")
+
     with tempfile.TemporaryDirectory(prefix="kb-import-quality-") as tmp:
         base = Path(tmp)
         raw = base / "raw" / "uploads" / "dirty.txt"

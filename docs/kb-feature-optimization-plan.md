@@ -253,3 +253,4 @@ Task D: Import quality for URL, RSS, WeChat, and files.
 - 2026-05-30: Hardened generated wiki frontmatter by YAML-quoting title, category, date, model, source, and tags, reducing risk from Windows paths, colons, quotes, and multiline LLM outputs.
 - 2026-05-30: Added `scripts/smoke_import_quality.py`, a no-network smoke test with a dirty fake LLM response that verifies category normalization, entity deduplication, tag insertion, and valid YAML frontmatter.
 - 2026-05-30: Extended the same metadata normalization to the batch import path used by uploaded files and URL-imported raw pages. Batch import now cleans title suffixes, normalizes generated category/entities/tags, safely quotes YAML tags, and is covered by the import-quality smoke test.
+- 2026-05-30: Added shared raw-import title cleanup helpers and applied them to URL, RSS, and WeChat raw save paths. Titles and generated filenames now strip common source suffixes before the batch processor sees them.

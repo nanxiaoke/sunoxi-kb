@@ -21,6 +21,11 @@ from typing import List, Dict, Optional, Tuple, Callable
 from urllib.parse import quote, urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+try:
+    from import_quality import clean_import_title, safe_import_stem
+except ImportError:
+    from .import_quality import clean_import_title, safe_import_stem
+
 logger = logging.getLogger(__name__)
 
 # ── URL 黑名单（内部地址、危险地址） ──────────────────────────
@@ -230,13 +235,13 @@ class WebCollector:
     def _extract_title(self, content: str, url: str) -> str:
         meta_title = re.search(r'(?m)^title:\s*["\']?(.+?)["\']?\s*$', content[:2000])
         if meta_title:
-            title = meta_title.group(1).strip().strip('"\'')
+            title = clean_import_title(meta_title.group(1), fallback="")
             if title and len(title) < 200:
                 return title
         for line in content.split("\n")[:30]:
             line = line.strip()
             if line.startswith("# "):
-                title = line[2:].strip()
+                title = clean_import_title(line[2:], fallback="")
                 if title and len(title) < 200:
                     return title
         parsed = urlparse(url)
@@ -244,14 +249,14 @@ class WebCollector:
         path_parts = [p for p in parsed.path.strip("/").split("/") if p]
         if path_parts:
             last = path_parts[-1].replace("-", " ").replace("_", " ")[:50]
-            return f"{domain} — {last}" if domain else f"网页_{self._url_hash(url)}"
+            return clean_import_title(f"{domain} — {last}" if domain else f"网页_{self._url_hash(url)}")
         return domain or f"网页_{self._url_hash(url)}"
 
     def save(self, url: str, content: str, metadata: Dict) -> Optional[Path]:
         """保存抓取结果为 Markdown 文件"""
-        title = self._extract_title(content, url)
+        title = clean_import_title(self._extract_title(content, url), fallback=f"网页_{self._url_hash(url)}")
         uh = self._url_hash(url)
-        safe = "".join(c for c in title if c.isalnum() or c in " -_—")[:50]
+        safe = safe_import_stem(title, fallback="webpage", max_len=50)
         filename = f"{safe}_{uh}.md"
         filepath = self.raw_dir / filename
 

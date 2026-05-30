@@ -179,13 +179,16 @@ Task B: Search and QA quality optimization.
 
 ### Task B Subtasks
 
-- [ ] Audit current `WikiSearcher.search()` scoring and tokenization behavior.
-- [ ] Add query diagnostics in search/QA responses for debugging ranking problems.
-- [ ] Improve query token expansion for Chinese compound terms and mixed English terms.
-- [ ] Improve result snippets so matched content is visible, not only document opening text.
-- [ ] Improve QA context scoring and citations.
-- [ ] Add focused search/QA smoke tests against the current wiki corpus.
+- [x] Audit current `WikiSearcher.search()` scoring and tokenization behavior.
+- [x] Add query diagnostics in search/QA responses for debugging ranking problems.
+- [x] Improve query token expansion for Chinese compound terms and mixed English terms.
+- [x] Improve result snippets so matched content is visible, not only document opening text.
+- [x] Improve QA context scoring and citations.
+- [x] Add focused search/QA smoke tests against the current wiki corpus.
 
 ### Implementation Progress
 
 - 2026-05-30: Task B started after Task A follow-up fixes. Initial inspection target: `scripts/search.py`, `scripts/qa.py`, and `/api/search` response shape.
+- 2026-05-30: Search/QA baseline run covered Harness, 横纵分析法, CC Switch, 模型切换, and Hermes 多 Agent queries. Main issues found: duplicate same-title search results, previews showing document openings instead of matched snippets, crawler metadata leaking into extractive QA, and noisy question words affecting Chinese queries.
+- 2026-05-30: First Task B fix landed: search now cleans source body/frontmatter noise, expands Chinese/mixed query tokens, deduplicates same-title results, returns matched source snippets plus query diagnostics, and WebUI search results use matched snippets when available.
+- 2026-05-30: Extractive QA now strips crawler metadata and prioritizes relevant source snippets before generated summary/keypoint text, improving answers for queries such as `横纵分析法是什么`.

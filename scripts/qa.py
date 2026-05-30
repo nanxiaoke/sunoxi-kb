@@ -198,14 +198,40 @@ class KnowledgeBaseQA:
         text = (text or '').strip()
         return (not text) or ('AI生成的摘要' in text) or ('AI提取的关键点' in text) or ('未提取到' in text)
 
+    def _is_noisy_text(self, text: str) -> bool:
+        text = text or ""
+        noise_patterns = [
+            "提取方法", "内容长度", "文件哈希", "抓取时间", "公众号biz", "公众号user_name",
+            "原文标题:", "来源:", "发布时间:", "此条目由AI自动生成"
+        ]
+        return any(p in text for p in noise_patterns)
+
     def _qa_content(self, content: str) -> str:
         """优先使用真实原文内容，跳过自动生成的相关文档/元数据区域。"""
         content = content or ""
         marker = "## 📄 原始内容预览"
         if marker in content:
             content = content.split(marker, 1)[1]
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                content = parts[2].strip()
         # 去掉尾部自动生成标记
         content = content.split("*此条目由AI自动生成", 1)[0]
+        cleaned_lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                cleaned_lines.append("")
+                continue
+            if stripped == "---":
+                continue
+            if re.match(r'^>\s*\*\*(来源|抓取时间|作者|发布时间|提取方法|内容长度|文件哈希|处理时间|分类|原始格式)\*\*\s*[:：]', stripped):
+                continue
+            if re.match(r'^\s*(来源|抓取时间|作者|发布时间|提取方法|内容长度|文件哈希|公众号biz|公众号user_name)\s*[:：]', stripped):
+                continue
+            cleaned_lines.append(line)
+        content = "\n".join(cleaned_lines)
         return self._clean_answer_text(content)
 
     def _split_content_chunks(self, content: str) -> List[str]:
@@ -354,32 +380,41 @@ class KnowledgeBaseQA:
             content = self._qa_content(doc_info.get("content") or "")
 
             if i == 1:
-                if summary and not self._is_placeholder(summary):
+                if summary and not self._is_placeholder(summary) and not self._is_noisy_text(summary):
                     first_summary = re.split(r'[。！？.!?]\s*', summary)[0].strip()
                     conclusion_bits.append(first_summary or title)
                 else:
                     conclusion_bits.append(f"《{title}》是知识库中与问题最相关的文档")
 
-            if not self._is_placeholder(" ".join(map(str, keypoints))):
-                for kp in keypoints[:4]:
-                    kp = self._clean_answer_text(str(kp).strip().lstrip('-•0123456789.、 '))
-                    if kp and len(kp) >= 6:
-                        points.append(f"- {kp[:180]} [文档{i}]")
-
             snippet = self._extract_relevant_content(content, query_tokens, max_chars=900) if content else ""
             # 选择含查询词的短句补充，避免整段堆砌
-            sentences = [x.strip() for x in re.split(r'(?<=[。！？.!?])\s*|\n+', snippet) if len(x.strip()) >= 12]
-            for sent in sentences[:5]:
+            sentences = [x.strip() for x in re.split(r'(?<=[。！？.!?])\s*|\n+', snippet) if len(x.strip()) >= 2]
+            anchor_seen = False
+            for sent in sentences[:30]:
                 sent = self._clean_answer_text(sent)
                 low = sent.lower()
                 if any(bad in sent for bad in ["公众号", "候选来源", "原文链接", "抓取时间", "建议分类", "Mz", "gh_"]):
                     continue
-                if len(sent) >= 12 and any(t.lower() in low for t in query_tokens if len(t) >= 2):
+                matched = any(t.lower() in low for t in query_tokens if len(t) >= 2)
+                if matched:
+                    anchor_seen = True
+                min_len = 6 if (i == 1 and anchor_seen) else 12
+                if matched and len(sent) <= max(len(t) for t in query_tokens if len(t) >= 2) + 2:
+                    continue
+                if len(sent) >= min_len and (matched or (i == 1 and anchor_seen)):
                     points.append(f"- {sent[:180]} [文档{i}]")
-                if len(points) >= 7:
+                if len(points) >= 12:
                     break
-            if len(points) >= 7:
+            if len(points) >= 12:
                 break
+
+            if not self._is_placeholder(" ".join(map(str, keypoints))):
+                for kp in keypoints[:4]:
+                    kp = self._clean_answer_text(str(kp).strip().lstrip('-•0123456789.、 '))
+                    if kp and len(kp) >= 6 and not self._is_noisy_text(kp):
+                        points.append(f"- {kp[:180]} [文档{i}]")
+                if len(points) >= 12:
+                    break
 
         # 去重并限制长度
         deduped = []
@@ -389,7 +424,7 @@ class KnowledgeBaseQA:
             if key and key not in seen:
                 seen.add(key)
                 deduped.append(p)
-            if len(deduped) >= 6:
+            if len(deduped) >= 10:
                 break
 
         conclusion = conclusion_bits[0] if conclusion_bits else documents[0].get("title", "相关文档")

@@ -72,6 +72,7 @@ class WikiSearcher:
             "has", "had", "do", "does", "did", "will", "would", "can", "could", "should", "may",
             "might", "must",
             "什么", "为什么", "为何", "如何", "怎样", "怎么", "是不是", "有没有",
+            "是什么", "这是什么", "什么是",
             "应该", "需要", "问题", "解决", "它", "这个", "那个", "哪些", "主要"
         ])
     
@@ -150,11 +151,72 @@ class WikiSearcher:
                     if positions:
                         tokens[word_lower] = positions
         return tokens
+
+    def _strip_frontmatter(self, content: str) -> str:
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                return parts[2].strip()
+        return content
+
+    def _clean_markup(self, text: str) -> str:
+        text = text or ""
+        text = re.sub(r'\[\[([^\]|]+)\|([^\]]+)\]\]', r'\2', text)
+        text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+        text = re.sub(r'https?://\S+', '', text)
+        text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    def _clean_source_body(self, text: str) -> str:
+        """Prefer real source content and remove crawler/frontmatter metadata noise."""
+        body = self._strip_frontmatter(text or "")
+        marker = "## 📄 原始内容预览"
+        if marker in body:
+            body = body.split(marker, 1)[1]
+        body = body.split("*此条目由AI自动生成", 1)[0]
+        body = self._strip_frontmatter(body.strip())
+        lines = []
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                lines.append("")
+                continue
+            if stripped in {"---"}:
+                continue
+            if re.match(r'^>\s*\*\*(来源|抓取时间|作者|发布时间|提取方法|内容长度|文件哈希|处理时间|分类|原始格式)\*\*\s*[:：]', stripped):
+                continue
+            if re.match(r'^\s*(来源|抓取时间|作者|发布时间|提取方法|内容长度|文件哈希|公众号biz|公众号user_name)\s*[:：]', stripped):
+                continue
+            lines.append(line)
+        return self._clean_markup("\n".join(lines))
+
+    def _expand_query_tokens(self, query: str, tokens: List[str]) -> List[str]:
+        expanded = list(tokens)
+        compact = re.sub(r'\s+', '', query or '').lower()
+        if len(compact) >= 2:
+            expanded.insert(0, compact)
+        # Keep mixed English phrases such as "cc switch" alongside individual tokens.
+        phrase = re.sub(r'\s+', ' ', (query or '').strip().lower())
+        if phrase and phrase not in expanded:
+            expanded.append(phrase)
+        # Chinese compound fallback: jieba may emit a long phrase only; add 2-4 char windows.
+        chinese = re.findall(r'[\u4e00-\u9fff]{3,}', compact)
+        for seq in chinese:
+            for size in (4, 3, 2):
+                if len(seq) >= size:
+                    for i in range(0, len(seq) - size + 1):
+                        expanded.append(seq[i:i + size])
+        return list(dict.fromkeys([t for t in expanded if t and t not in self.stop_words]))
     
     def _extract_document_info(self, filepath: Path) -> Optional[Dict]:
         """提取文档信息（支持新旧格式）"""
         try:
-            content = filepath.read_text(encoding='utf-8')
+            raw_content = filepath.read_text(encoding='utf-8')
+            content = self._strip_frontmatter(raw_content)
             relative_path = filepath.relative_to(self.wiki_dir)
             # 使用 wiki 根目录相对路径作为稳定唯一ID，避免不同目录同名文件互相覆盖。
             doc_id = relative_path.as_posix()[:-3] if relative_path.as_posix().endswith('.md') else relative_path.as_posix()
@@ -260,11 +322,11 @@ class WikiSearcher:
                 "full_path": str(filepath),
                 "title": title,
                 "category": category,
-                "summary": summary,
+                "summary": self._clean_markup(summary),
                 "entities": entities,
                 "keypoints": keypoints,
                 "original_preview": original_preview,
-                "content": content,
+                "content": self._clean_source_body(raw_content),
                 "file_size": filepath.stat().st_size,
                 "modified_time": filepath.stat().st_mtime
             }
@@ -398,7 +460,7 @@ class WikiSearcher:
             logger.warning("索引为空，请先构建索引")
             return []
         
-        query_tokens = self._tokenize(query)
+        query_tokens = self._expand_query_tokens(query, self._tokenize(query))
         if not query_tokens:
             return []
         
@@ -441,6 +503,7 @@ class WikiSearcher:
             if doc_info:
                 adjusted_scores[doc_id] = score + self._phrase_bonus(query, doc_info, query_tokens)
 
+        seen_titles = set()
         for doc_id, score in sorted(adjusted_scores.items(), key=lambda x: x[1], reverse=True):
             if score <= 0:
                 continue
@@ -452,9 +515,16 @@ class WikiSearcher:
             # 分类过滤
             if category_filter and doc_info["category"] != category_filter:
                 continue
+
+            title_key = re.sub(r'\s+', '', (doc_info.get("title") or "").lower())
+            if title_key and title_key in seen_titles:
+                continue
+            if title_key:
+                seen_titles.add(title_key)
             
             # 计算匹配片段
             highlights = self._get_highlights(doc_info, query_tokens)
+            snippets = self._get_matched_snippets(doc_info, query_tokens)
             
             # 如果启用高亮标记，在摘要中标记匹配词
             summary_text = doc_info["summary"]
@@ -476,7 +546,9 @@ class WikiSearcher:
                 "path": doc_info["path"],
                 "score": round(score, 2),
                 "highlights": highlights[:3],  # 最多3个高亮片段
+                "matched_snippets": snippets[:3],
                 "entities": doc_info["entities"][:5],  # 最多5个实体
+                "query_tokens": query_tokens[:12],
                 "modified_time": doc_info["modified_time"]
             }
             results.append(result)
@@ -484,6 +556,37 @@ class WikiSearcher:
         # 应用分页
         paginated = results[offset:offset + limit] if offset else results[:limit]
         return paginated
+
+    def _get_matched_snippets(self, doc_info: Dict, query_tokens: List[str], *, max_snippets: int = 3) -> List[str]:
+        """Return readable source snippets around matched query terms."""
+        content = doc_info.get("content") or ""
+        if not content:
+            return []
+        chunks = re.split(r'\n\s*\n|(?<=。)|(?<=！)|(?<=？)|(?<=；)|(?<=[.!?])\s+', content)
+        scored = []
+        tokens = [t.lower() for t in query_tokens if len(t) >= 2]
+        for idx, chunk in enumerate(chunks):
+            chunk = self._clean_markup(chunk.strip())
+            if len(chunk) < 12:
+                continue
+            lower = chunk.lower()
+            score = 0
+            for token in tokens:
+                if token in lower:
+                    score += 5 + min(lower.count(token), 3)
+            if score:
+                scored.append((score, idx, chunk))
+        snippets = []
+        seen = set()
+        for _score, _idx, chunk in sorted(scored, key=lambda x: (-x[0], x[1]))[:max_snippets * 2]:
+            snippet = chunk[:240] + ("..." if len(chunk) > 240 else "")
+            key = re.sub(r'\W+', '', snippet.lower())[:80]
+            if key and key not in seen:
+                seen.add(key)
+                snippets.append(snippet)
+            if len(snippets) >= max_snippets:
+                break
+        return snippets
     
     def _get_highlights(self, doc_info: Dict, query_tokens: List[str]) -> List[str]:
         """获取匹配的高亮片段"""
@@ -505,9 +608,15 @@ class WikiSearcher:
                 for sentence in sentences:
                     if token in sentence.lower() and len(sentence) > 10:
                         highlights.append(sentence.strip())
-                        break
+                    break
                 if highlights and len(highlights) > 1:
                     break
+
+        # 检查正文片段
+        for snippet in self._get_matched_snippets(doc_info, query_tokens, max_snippets=2):
+            highlights.append(snippet)
+            if len(highlights) >= 3:
+                break
         
         # 检查实体
         for entity in doc_info["entities"][:10]:

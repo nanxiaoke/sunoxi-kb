@@ -935,6 +935,7 @@ def search():
 
     results = []
     keyword_scores = {}
+    keyword_meta = {}
 
     # Keyword search
     if mode in ("keyword", "hybrid"):
@@ -945,6 +946,7 @@ def search():
                 doc_path = item.get("path", "")
                 if doc_path:
                     keyword_scores[doc_path] = item.get("score", 0)
+                    keyword_meta[doc_path] = item
         except Exception as e:
             logger.warning(f"Keyword search failed: {e}")
 
@@ -986,11 +988,15 @@ def search():
         if fpath.exists():
             rel = fpath.relative_to(wiki_dir)
             preview = _read_preview(fpath, 200)
+            meta = keyword_meta.get(doc_id, {})
+            snippets = meta.get("matched_snippets") or meta.get("highlights") or []
             results.append({
                 "path": str(rel),
                 "name": fpath.stem,
                 "category": str(rel.parent) if str(rel.parent) != "." else "root",
-                "preview": preview,
+                "preview": snippets[0] if snippets else preview,
+                "matched_snippets": snippets[:3],
+                "title": meta.get("title") or fpath.stem,
                 "score_keyword": round(ks, 3),
                 "score_semantic": round(ss, 3),
                 "score_total": round(total_score, 3),
@@ -999,6 +1005,10 @@ def search():
     return jsonify({
         "query": q,
         "mode": mode,
+        "diagnostics": {
+            "keyword_hits": len(keyword_scores),
+            "semantic_hits": len(semantic_scores),
+        },
         "total": len(results),
         "results": results,
     })

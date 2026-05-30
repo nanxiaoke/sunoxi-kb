@@ -42,6 +42,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("web_ui")
 LLM_RUNTIME_CONFIG = KB_DIR / "llm_runtime.yaml"
 LLM_CONFIG_BACKUP_DIR = KB_DIR / "backups" / "llm_runtime"
+WEBUI_CONFIG = KB_DIR / "config" / "webui.yaml"
+WEBUI_CONFIG_BACKUP_DIR = KB_DIR / "backups" / "webui"
 LLM_SECRET_ENV_FILE = Path.home() / ".config" / "karpathy-kb" / "llm.env"
 LLM_SYSTEMD_DROPIN = Path.home() / ".config" / "systemd" / "user" / "karpathy-kb.service.d" / "10-llm-env.conf"
 LLM_SECRET_INSTALL_SCRIPT = KB_DIR / "scripts" / "install_llm_env.sh"
@@ -124,6 +126,27 @@ ALLOWED_EXTENSIONS = {
 
 MAX_UPLOAD_MB = 50
 
+WEBUI_CONFIG_DEFAULTS = {
+    "app": {
+        "name": "Sunoxi KB",
+        "title": "Sunoxi 知识库",
+        "subtitle": "Personal Knowledge Base",
+        "logo": "/static/favicon.svg?v=4",
+    },
+    "features": {
+        "chat": True,
+        "graph": True,
+        "documents": True,
+        "upload": True,
+        "url_import": True,
+        "candidates": True,
+        "rss": True,
+        "wechat": True,
+        "llm_settings": True,
+        "llm_audit": True,
+    },
+}
+
 
 def _allowed_file(filename: str) -> bool:
     if "." not in filename:
@@ -138,6 +161,89 @@ def _file_hash(filepath: Path) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()[:16]
+
+
+def _deep_merge_defaults(defaults: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    merged = json.loads(json.dumps(defaults, ensure_ascii=False))
+    for key, value in (data or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_webui_config_raw() -> Dict[str, Any]:
+    if not WEBUI_CONFIG.exists():
+        return {}
+    data = yaml.safe_load(WEBUI_CONFIG.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"WebUI config must be a mapping: {WEBUI_CONFIG}")
+    return data
+
+
+def _webui_config_payload() -> Dict[str, Any]:
+    config = _deep_merge_defaults(WEBUI_CONFIG_DEFAULTS, _load_webui_config_raw())
+    return {
+        "config_path": str(WEBUI_CONFIG),
+        "exists": WEBUI_CONFIG.exists(),
+        "app": config["app"],
+        "features": config["features"],
+    }
+
+
+def _clean_webui_config_update(payload: Dict[str, Any]) -> Dict[str, Any]:
+    current = _webui_config_payload()
+    app_in = payload.get("app") if isinstance(payload.get("app"), dict) else {}
+    features_in = payload.get("features") if isinstance(payload.get("features"), dict) else {}
+
+    app = dict(current["app"])
+    for key in ("name", "title", "subtitle", "logo"):
+        if key in app_in:
+            value = str(app_in.get(key) or "").strip()
+            if key in {"name", "title"} and not value:
+                raise ValueError(f"app.{key} is required")
+            if len(value) > 160:
+                raise ValueError(f"app.{key} is too long")
+            app[key] = value
+
+    features = dict(current["features"])
+    for key in WEBUI_CONFIG_DEFAULTS["features"]:
+        if key in features_in:
+            features[key] = bool(features_in[key])
+
+    return {"app": app, "features": features}
+
+
+def _backup_webui_config(reason: str = "manual") -> Optional[Path]:
+    if not WEBUI_CONFIG.exists():
+        return None
+    WEBUI_CONFIG_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    safe_reason = re.sub(r"[^A-Za-z0-9_-]+", "-", reason).strip("-")[:32] or "manual"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = WEBUI_CONFIG_BACKUP_DIR / f"webui_{stamp}_{safe_reason}.yaml"
+    shutil.copy2(WEBUI_CONFIG, backup)
+    return backup
+
+
+def _write_webui_config(cleaned: Dict[str, Any]) -> None:
+    WEBUI_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = WEBUI_CONFIG.with_suffix(".yaml.tmp")
+    header = "# Local WebUI runtime configuration. Do not store secrets here.\n\n"
+    tmp.write_text(header + yaml.safe_dump(cleaned, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    tmp.replace(WEBUI_CONFIG)
+
+
+def _feature_enabled(name: str) -> bool:
+    try:
+        return bool(_webui_config_payload()["features"].get(name, True))
+    except Exception as e:
+        logger.warning(f"Feature config load failed; allowing {name}: {e}")
+        return True
+
+
+def _feature_disabled_response(name: str):
+    return jsonify({"error": f"feature disabled: {name}", "feature": name}), 403
 
 
 def _is_generated_wiki_page(relpath: Path) -> bool:
@@ -462,6 +568,33 @@ def _translate_wiki_document(wiki_text: str, *, provider_name: str, model: str) 
 #  API Routes
 # ═══════════════════════════════════════════════════════════════════
 
+# ── WebUI runtime settings ───────────────────────────────────────
+
+@app.route("/api/webui/config", methods=["GET"])
+def get_webui_config():
+    try:
+        return jsonify(_webui_config_payload())
+    except Exception as e:
+        logger.error(f"Load WebUI config failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/webui/config", methods=["PATCH"])
+def update_webui_config():
+    data = request.get_json(silent=True) or {}
+    try:
+        cleaned = _clean_webui_config_update(data)
+        backup = _backup_webui_config("before-webui-save")
+        _write_webui_config(cleaned)
+        payload = _webui_config_payload()
+        payload["backup"] = str(backup.relative_to(KB_DIR)) if backup else None
+        logger.info("WebUI runtime config updated")
+        return jsonify(payload)
+    except Exception as e:
+        logger.error(f"Update WebUI config failed: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
 # ── Document management ──────────────────────────────────────────
 
 @app.route("/api/documents", methods=["GET"])
@@ -517,6 +650,8 @@ def list_documents():
 @app.route("/api/documents", methods=["POST"])
 def upload_document():
     """Upload one or more documents. Auto-categorizes and triggers processing."""
+    if not _feature_enabled("upload"):
+        return _feature_disabled_response("upload")
     files = request.files.getlist("files")
     category = request.form.get("category", "notes")
     auto_process = request.form.get("auto_process", "true").lower() == "true"
@@ -567,15 +702,43 @@ def upload_document():
     # Auto-process if requested
     processed = []
     if auto_process:
-        try:
-            importer = _get_importer()
-            for r in results:
-                if r["status"] == "ok":
-                    filepath = KB_DIR / r["saved_as"]
+        importer = _get_importer()
+        for r in results:
+            if r["status"] == "ok":
+                filepath = KB_DIR / r["saved_as"]
+                item = {
+                    "filename": r["filename"],
+                    "stage": "auto_process",
+                    "raw_path": r["saved_as"],
+                    "processed": False,
+                    "wiki_path": None,
+                    "llm": None,
+                    "message": "",
+                    "error": None,
+                }
+                try:
                     ok, msg = importer.process_file(filepath)
-                    processed.append({"filename": r["filename"], "processed": ok, "message": msg})
-        except Exception as e:
-            logger.warning(f"Auto-process failed: {e}")
+                    item["processed"] = bool(ok)
+                    item["message"] = str(msg)
+                    if ok and msg:
+                        wiki_path = Path(str(msg))
+                        if not wiki_path.is_absolute():
+                            wiki_path = KB_DIR / "wiki" / str(msg)
+                        if wiki_path.exists():
+                            item["wiki_path"] = str(wiki_path.relative_to(KB_DIR / "wiki"))
+                            meta, _body = _split_frontmatter(wiki_path.read_text(encoding="utf-8", errors="ignore"))
+                            item["llm"] = meta.get("llm") if isinstance(meta.get("llm"), dict) else None
+                    if not ok:
+                        item["error"] = str(msg)
+                    processed.append(item)
+                except Exception as e:
+                    logger.warning(f"Auto-process failed for {filepath}: {e}", exc_info=True)
+                    item["stage"] = "auto_process_error"
+                    item["error"] = str(e)
+                    item["message"] = f"处理失败: {e}"
+                    processed.append(item)
+        if any(p.get("processed") for p in processed):
+            _rebuild_index()
 
     return jsonify({
         "uploaded": len([r for r in results if r["status"] == "ok"]),
@@ -734,6 +897,8 @@ def _get_qa_system():
 @app.route("/api/search", methods=["GET"])
 def search():
     """Keyword + semantic hybrid search or QA generation."""
+    if not _feature_enabled("chat"):
+        return _feature_disabled_response("chat")
     q = request.args.get("q", "").strip()
     mode = request.args.get("mode", "hybrid")  # keyword | semantic | hybrid
     limit = int(request.args.get("limit", 10))
@@ -853,6 +1018,8 @@ def _read_preview(filepath: Path, max_chars: int = 200) -> str:
 @app.route("/api/documents/url", methods=["POST"])
 def upload_url():
     """Fetch and import a URL. Uses concurrent multi-source fetch with fallback."""
+    if not _feature_enabled("url_import"):
+        return _feature_disabled_response("url_import")
     data = request.get_json(silent=True)
     url = data.get("url", "") if data else request.form.get("url", "")
     auto_process = data.get("auto_process", True) if data else True
@@ -1370,6 +1537,8 @@ def _llm_audit_payload() -> Dict[str, Any]:
 
 @app.route("/api/llm/config", methods=["GET"])
 def get_llm_config():
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     try:
         return jsonify(_llm_config_payload())
     except Exception as e:
@@ -1379,6 +1548,8 @@ def get_llm_config():
 
 @app.route("/api/llm/config", methods=["PATCH"])
 def update_llm_config():
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     data = request.get_json(silent=True) or {}
     try:
         cleaned = _clean_llm_config_update(data)
@@ -1396,6 +1567,8 @@ def update_llm_config():
 
 @app.route("/api/llm/mode", methods=["POST"])
 def set_llm_mode():
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     data = request.get_json(silent=True) or {}
     mode = str(data.get("mode") or "").strip().lower()
     try:
@@ -1415,11 +1588,15 @@ def set_llm_mode():
 
 @app.route("/api/llm/config/backups", methods=["GET"])
 def list_llm_config_backups():
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     return jsonify({"backups": _llm_config_backups()})
 
 
 @app.route("/api/llm/config/backups/<path:backup_name>/restore", methods=["POST"])
 def restore_llm_config_backup(backup_name: str):
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     try:
         if "/" in backup_name or "\\" in backup_name or not backup_name.startswith("llm_runtime_") or not backup_name.endswith(".yaml"):
             return jsonify({"error": "invalid backup name"}), 400
@@ -1443,6 +1620,8 @@ def restore_llm_config_backup(backup_name: str):
 
 @app.route("/api/llm/audit", methods=["GET"])
 def llm_audit():
+    if not _feature_enabled("llm_audit"):
+        return _feature_disabled_response("llm_audit")
     try:
         return jsonify(_llm_audit_payload())
     except Exception as e:
@@ -1452,6 +1631,8 @@ def llm_audit():
 
 @app.route("/api/llm/providers/<provider_name>/test", methods=["POST"])
 def test_llm_provider(provider_name: str):
+    if not _feature_enabled("llm_settings"):
+        return _feature_disabled_response("llm_settings")
     try:
         from llm_service import LLMService
         service = LLMService()
@@ -1616,6 +1797,8 @@ def stats():
 @app.route("/api/graph", methods=["GET"])
 def graph_data():
     """Return graph JSON for ECharts/Force-Graph visualization."""
+    if not _feature_enabled("graph"):
+        return _feature_disabled_response("graph")
     entity = request.args.get("entity", "")
     mode = request.args.get("mode", "full")  # full | neighbors
     limit = int(request.args.get("limit", 50))  # top N nodes
@@ -1686,12 +1869,16 @@ def _get_wechat_discovery():
 
 @app.route("/api/wechat/sources", methods=["GET"])
 def list_wechat_sources():
+    if not _feature_enabled("wechat"):
+        return _feature_disabled_response("wechat")
     wd = _get_wechat_discovery()
     return jsonify({"sources": wd.list_sources()})
 
 
 @app.route("/api/wechat/sources", methods=["POST"])
 def upsert_wechat_source():
+    if not _feature_enabled("wechat"):
+        return _feature_disabled_response("wechat")
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
@@ -1709,6 +1896,8 @@ def upsert_wechat_source():
 
 @app.route("/api/wechat/discover", methods=["POST"])
 def discover_wechat_articles():
+    if not _feature_enabled("wechat"):
+        return _feature_disabled_response("wechat")
     data = request.get_json(silent=True) or {}
     try:
         wd = _get_wechat_discovery()
@@ -1733,6 +1922,8 @@ def _get_rss_manager():
 
 @app.route("/api/rss/feeds", methods=["GET"])
 def list_rss_feeds():
+    if not _feature_enabled("rss"):
+        return _feature_disabled_response("rss")
     mgr = _get_rss_manager()
     feeds = []
     for k, v in mgr.config.items():
@@ -1745,6 +1936,8 @@ def list_rss_feeds():
 
 @app.route("/api/rss/feeds", methods=["POST"])
 def upsert_rss_feed():
+    if not _feature_enabled("rss"):
+        return _feature_disabled_response("rss")
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
@@ -1774,6 +1967,8 @@ def upsert_rss_feed():
 
 @app.route("/api/rss/feeds/<key>", methods=["DELETE"])
 def delete_rss_feed(key: str):
+    if not _feature_enabled("rss"):
+        return _feature_disabled_response("rss")
     try:
         mgr = _get_rss_manager()
         if key in mgr.config:
@@ -1792,6 +1987,8 @@ def delete_rss_feed(key: str):
 
 @app.route("/api/rss/feeds/<key>", methods=["PATCH"])
 def update_rss_feed(key: str):
+    if not _feature_enabled("rss"):
+        return _feature_disabled_response("rss")
     data = request.get_json(silent=True) or {}
     try:
         from rss_sync import RSSManager
@@ -1825,6 +2022,8 @@ def update_rss_feed(key: str):
 
 @app.route("/api/rss/sync", methods=["POST"])
 def sync_rss():
+    if not _feature_enabled("rss"):
+        return _feature_disabled_response("rss")
     data = request.get_json(silent=True) or {}
     try:
         mgr = _get_rss_manager()
@@ -1872,6 +2071,8 @@ def _get_candidate_manager():
 
 @app.route("/api/candidates", methods=["GET"])
 def list_candidates():
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     include_imported = request.args.get("include_imported", "false").lower() == "true"
     include_skipped = request.args.get("include_skipped", "false").lower() == "true"
     min_score = int(request.args.get("min_score", "0") or 0)
@@ -1897,6 +2098,8 @@ def list_candidates():
 
 @app.route("/api/candidates/<cid>", methods=["GET"])
 def get_candidate(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     cm = _get_candidate_manager()
     item = cm.get_candidate(cid)
     if not item:
@@ -1906,6 +2109,8 @@ def get_candidate(cid: str):
 
 @app.route("/api/candidates/<cid>/metadata", methods=["PATCH", "POST"])
 def update_candidate_metadata(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     try:
         cm = _get_candidate_manager()
@@ -1924,6 +2129,8 @@ def update_candidate_metadata(cid: str):
 
 @app.route("/api/candidates/batch-skip", methods=["POST"])
 def batch_skip_candidates():
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     try:
         cm = _get_candidate_manager()
@@ -1941,6 +2148,8 @@ def batch_skip_candidates():
 
 @app.route("/api/candidates/<cid>/translate", methods=["POST"])
 def translate_candidate(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     force = bool(data.get("force", False))
     preview = bool(data.get("preview", False))
@@ -1955,6 +2164,8 @@ def translate_candidate(cid: str):
 
 @app.route("/api/candidates/translate-preview", methods=["POST"])
 def translate_candidates_preview():
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     raw_limit = data.get("limit", 20)
     limit = int(raw_limit if raw_limit is not None else 20)
@@ -1979,6 +2190,8 @@ def translate_candidates_preview():
 
 @app.route("/api/candidates/<cid>/import", methods=["POST"])
 def import_candidate(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     process = data.get("process", True)
     run_maintenance = data.get("run_maintenance", True)
@@ -2092,6 +2305,8 @@ def _run_batch_import_job(data: dict) -> None:
 @app.route("/api/candidates/batch-import", methods=["POST"])
 def batch_import_candidates():
     """Start an async configurable queue import job."""
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     if _batch_import_job.get("running") or _batch_import_lock.locked():
         return jsonify({"error": "已有批量导入任务正在执行，请等待当前任务结束后再试", "job": _batch_import_job}), 409
     data = request.get_json(silent=True) or {}
@@ -2102,11 +2317,15 @@ def batch_import_candidates():
 
 @app.route("/api/candidates/batch-import/status", methods=["GET"])
 def batch_import_status():
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     return jsonify(_batch_import_job)
 
 
 @app.route("/api/candidates/<cid>/skip", methods=["POST"])
 def skip_candidate(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     data = request.get_json(silent=True) or {}
     reason = data.get("reason", "")
     try:
@@ -2118,6 +2337,8 @@ def skip_candidate(cid: str):
 
 @app.route("/api/candidates/<cid>/restore", methods=["POST"])
 def restore_candidate(cid: str):
+    if not _feature_enabled("candidates"):
+        return _feature_disabled_response("candidates")
     try:
         cm = _get_candidate_manager()
         return jsonify(cm.restore_candidate(cid))
@@ -2228,7 +2449,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 </button>
             </div>
             <div class="flex-1 px-2">
-                <span class="font-bold text-lg tracking-tight">Sunoxi KB</span>
+                <span class="font-bold text-lg tracking-tight">{{ webuiApp.name }}</span>
             </div>
             <div class="flex-none">
                 <button class="btn btn-ghost btn-circle" @click="toggleTheme">
@@ -2241,37 +2462,37 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div :class="['fixed md:relative top-16 md:top-auto bottom-0 md:bottom-auto left-0 w-[82vw] max-w-xs md:w-64 md:max-w-none bg-base-200 border-r border-base-300 flex flex-col transition-transform duration-300 z-40 h-[calc(100dvh-4rem)] md:h-full shadow-2xl md:shadow-none', mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
             <div class="p-4 hidden md:flex items-center justify-between border-b border-base-300">
                 <div class="flex items-center gap-2">
-                    <img src="/static/favicon.svg?v=4" alt="Sunoxi KB" class="w-8 h-8 rounded-xl shadow-sm">
-                    <h1 class="font-bold text-lg tracking-tight">Sunoxi KB</h1>
+                    <img :src="webuiApp.logo" :alt="webuiApp.name" class="w-8 h-8 rounded-xl shadow-sm">
+                    <h1 class="font-bold text-lg tracking-tight truncate">{{ webuiApp.name }}</h1>
                 </div>
             </div>
             
             <div class="flex-1 overflow-y-auto p-4 space-y-2">
                 <!-- Nav Items -->
-                <button @click="switchTab('chat')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'chat' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('chat')" @click="switchTab('chat')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'chat' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
                     <span class="font-medium">{{ t('nav.chat') }}</span>
                 </button>
-                <button @click="switchTab('graph')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'graph' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('graph')" @click="switchTab('graph')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'graph' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                     <span class="font-medium">{{ t('nav.graph') }}</span>
                 </button>
-                <button @click="switchTab('docs')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'docs' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('documents')" @click="switchTab('docs')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'docs' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                     <span class="font-medium">{{ t('nav.docs') }}</span>
                     <span class="ml-auto badge badge-sm" v-if="stats && stats.wiki_documents">{{stats.wiki_documents}}</span>
                 </button>
-                <button @click="switchTab('candidates')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'candidates' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('candidates')" @click="switchTab('candidates')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'candidates' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <span class="font-medium">{{ t('nav.candidates') }}</span>
                     <span class="ml-auto badge badge-sm" v-if="candidates.length">{{candidates.length}}</span>
                 </button>
-                <button @click="switchTab('wechat')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'wechat' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('wechat')" @click="switchTab('wechat')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'wechat' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V7a2 2 0 012-2h3l2-2h4l2 2h3a2 2 0 012 2v11a2 2 0 01-2 2z"></path></svg>
                     <span class="font-medium">{{ t('nav.wechat') }}</span>
                     <span class="ml-auto badge badge-sm" v-if="wechatSources.length">{{wechatSources.length}}</span>
                 </button>
-                <button @click="switchTab('rss')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'rss' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
+                <button v-if="featureEnabled('rss')" @click="switchTab('rss')" :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors', activeTab === 'rss' ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' : 'hover:bg-base-300']">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                     <span class="font-medium">{{ t('nav.rss') }}</span>
                     <span class="ml-auto badge badge-sm" v-if="rssFeeds.length">{{rssFeeds.length}}</span>
@@ -2464,11 +2685,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 <span v-else class="mr-1">🧹</span>
                                 {{ isMaintaining ? t('docs.maintaining') : t('docs.maintenance') }}
                             </button>
-                            <button class="btn btn-sm btn-outline rounded-full" @click="showUrlInput = !showUrlInput">
+                            <button v-if="featureEnabled('url_import')" class="btn btn-sm btn-outline rounded-full" @click="showUrlInput = !showUrlInput">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                                 {{ t('docs.fetchUrl') }}
                             </button>
-                            <label class="btn btn-sm btn-primary rounded-full cursor-pointer shadow-md">
+                            <label v-if="featureEnabled('upload')" class="btn btn-sm btn-primary rounded-full cursor-pointer shadow-md">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                 {{ t('docs.upload') }}
                                 <input type="file" multiple class="hidden" @change="handleFileUpload">
@@ -2476,8 +2697,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         </div>
                     </div>
 
+                    <div v-if="featureEnabled('upload') && fileImportProviderChain" class="alert border border-info/30 bg-info/10 text-xs mb-4">
+                        <div>
+                            <div class="font-semibold">文件上传处理链路</div>
+                            <div class="font-mono break-all mt-1">file_import_structure: {{ fileImportProviderChain }}</div>
+                            <div class="opacity-70 mt-1">当前模式：{{ llmModeLabel }} · fallback {{ fileImportFlow?.allow_fallback ? 'on' : 'off' }}</div>
+                        </div>
+                    </div>
+
                     <!-- Upload Area Dropzone -->
-                    <div 
+                    <div v-if="featureEnabled('upload')"
                         @dragover.prevent="dragOver = true" 
                         @dragleave.prevent="dragOver = false" 
                         @drop.prevent="handleDrop"
@@ -2490,7 +2719,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
                     <!-- URL Fetch Input Card -->
                     <transition name="fade">
-                        <div v-show="showUrlInput" class="card bg-base-200 border border-base-300 rounded-2xl p-6 mb-8 shadow-sm">
+                        <div v-show="showUrlInput && featureEnabled('url_import')" class="card bg-base-200 border border-base-300 rounded-2xl p-6 mb-8 shadow-sm">
                             <h3 class="font-semibold flex items-center gap-2 mb-3">🔗 {{ t('docs.fetchTitle') }}</h3>
                             <form @submit.prevent="fetchUrl" class="flex flex-col md:flex-row gap-3">
                                 <input 
@@ -2972,7 +3201,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 </div>
             </transition>
 
-            <!-- Tab: LLM Settings -->
+            <!-- Tab: System Settings -->
             <transition name="fade">
                 <div v-show="activeTab === 'settings'" class="absolute inset-0 flex flex-col overflow-y-auto bg-base-100 px-4 pt-5 pb-24 md:p-8">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
@@ -2981,21 +3210,62 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <p class="opacity-60 text-sm mt-1">{{ t('settings.subtitle') }}</p>
                         </div>
                         <div class="flex gap-2">
-                            <button class="btn btn-sm btn-outline rounded-full" @click="loadLlmConfig" :disabled="loadingLlmConfig">
-                                <span v-if="loadingLlmConfig" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.refresh') }}
+                            <button class="btn btn-sm btn-outline rounded-full" @click="refreshAllSettings" :disabled="loadingWebuiConfig || loadingLlmConfig">
+                                <span v-if="loadingWebuiConfig || loadingLlmConfig" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.refresh') }}
                             </button>
                             <button class="btn btn-sm btn-outline rounded-full" @click="loadLlmBackups" :disabled="loadingLlmConfig">
                                 {{ t('settings.backups') }}
                             </button>
-                            <button class="btn btn-sm btn-primary rounded-full" @click="saveLlmConfig" :disabled="savingLlmConfig || loadingLlmConfig">
-                                <span v-if="savingLlmConfig" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.save') }}
+                            <button class="btn btn-sm btn-primary rounded-full" @click="saveAllSettings" :disabled="savingWebuiConfig || savingLlmConfig || loadingWebuiConfig || loadingLlmConfig">
+                                <span v-if="savingWebuiConfig || savingLlmConfig" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.save') }}
                             </button>
                         </div>
+                    </div>
+                    <div class="grid lg:grid-cols-[1fr_1.2fr] gap-5 mb-5">
+                        <section class="card bg-base-200 border border-base-300 rounded-2xl">
+                            <div class="card-body p-5">
+                                <h3 class="font-semibold mb-3">{{ t('settings.basic') }}</h3>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">{{ t('settings.appName') }}</span></div>
+                                        <input v-model="webuiConfig.app.name" class="input input-sm input-bordered" />
+                                    </label>
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">{{ t('settings.appTitle') }}</span></div>
+                                        <input v-model="webuiConfig.app.title" class="input input-sm input-bordered" />
+                                    </label>
+                                </div>
+                                <label class="form-control mt-2">
+                                    <div class="label py-1"><span class="label-text text-xs">{{ t('settings.appSubtitle') }}</span></div>
+                                    <input v-model="webuiConfig.app.subtitle" class="input input-sm input-bordered" />
+                                </label>
+                                <label class="form-control mt-2">
+                                    <div class="label py-1"><span class="label-text text-xs">{{ t('settings.appLogo') }}</span></div>
+                                    <input v-model="webuiConfig.app.logo" class="input input-sm input-bordered font-mono text-xs" />
+                                </label>
+                            </div>
+                        </section>
+                        <section class="card bg-base-200 border border-base-300 rounded-2xl">
+                            <div class="card-body p-5">
+                                <div class="flex items-start justify-between gap-3 mb-3">
+                                    <div>
+                                        <h3 class="font-semibold">{{ t('settings.features') }}</h3>
+                                        <p class="text-xs opacity-60 mt-1">{{ t('settings.featureHint') }}</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                    <label v-for="key in Object.keys(webuiConfig.features)" :key="key" class="label cursor-pointer justify-start gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
+                                        <input v-model="webuiConfig.features[key]" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                                        <span class="label-text font-mono text-xs">{{ key }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                     <div class="alert border border-info/30 bg-info/10 text-sm mb-6">
                         <div>{{ t('settings.secretNote') }}</div>
                     </div>
-                    <div class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
+                    <div v-if="featureEnabled('llm_settings')" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
                         <div class="card-body p-4">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div>
@@ -3019,7 +3289,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <div v-if="llmModeDescription" class="mt-3 text-xs opacity-70">{{ llmModeDescription }}</div>
                         </div>
                     </div>
-                    <div v-if="llmSecretSetup" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
+                    <div v-if="featureEnabled('llm_settings') && llmSecretSetup" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
                         <div class="card-body p-4">
                             <div class="font-semibold mb-3">{{ t('settings.setupCommand') }}</div>
                             <div class="grid lg:grid-cols-2 gap-3 text-xs">
@@ -3048,7 +3318,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
+                    <div v-if="featureEnabled('llm_audit')" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
                         <div class="card-body p-4">
                             <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                                 <div class="font-semibold">{{ t('settings.audit') }}</div>
@@ -3139,7 +3409,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <div v-else class="text-sm opacity-60">{{ loadingLlmAudit ? 'Loading...' : 'No audit data loaded.' }}</div>
                         </div>
                     </div>
-                    <div v-if="llmBackups.length" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
+                    <div v-if="featureEnabled('llm_settings') && llmBackups.length" class="card bg-base-200 border border-base-300 rounded-2xl mb-5">
                         <div class="card-body p-4">
                             <div class="font-semibold mb-2">{{ t('settings.backups') }}</div>
                             <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
@@ -3153,8 +3423,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div v-if="loadingLlmConfig" class="flex justify-center py-16"><span class="loading loading-spinner loading-lg text-primary"></span></div>
-                    <div v-else class="grid xl:grid-cols-[26rem_1fr] gap-5">
+                    <div v-if="featureEnabled('llm_settings') && loadingLlmConfig" class="flex justify-center py-16"><span class="loading loading-spinner loading-lg text-primary"></span></div>
+                    <div v-else-if="featureEnabled('llm_settings')" class="grid xl:grid-cols-[26rem_1fr] gap-5">
                         <section class="card bg-base-200 border border-base-300 rounded-2xl">
                             <div class="card-body p-5">
                                 <div class="flex items-center justify-between mb-2">
@@ -3518,9 +3788,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const associationReport = ref(null);
                 const loadingAssociations = ref(false);
                 const uiLang = ref(localStorage.getItem('kb_ui_lang') || 'zh');
+                const webuiConfig = ref({
+                    app: { name: 'Sunoxi KB', title: 'Sunoxi 知识库', subtitle: 'Personal Knowledge Base', logo: '/static/favicon.svg?v=4' },
+                    features: { chat: true, graph: true, documents: true, upload: true, url_import: true, candidates: true, rss: true, wechat: true, llm_settings: true, llm_audit: true }
+                });
+                const loadingWebuiConfig = ref(false);
+                const savingWebuiConfig = ref(false);
+                const webuiApp = computed(() => webuiConfig.value.app || {});
+                const webuiFeatures = computed(() => webuiConfig.value.features || {});
+                const featureEnabled = (name) => webuiFeatures.value[name] !== false;
                 const i18n = {
                     zh: {
-                        nav: { chat: '智能问答', graph: '知识图谱', docs: '文档管理', candidates: '候选池', wechat: '公众号订阅', rss: 'RSS订阅', settings: '模型配置' },
+                        nav: { chat: '智能问答', graph: '知识图谱', docs: '文档管理', candidates: '候选池', wechat: '公众号订阅', rss: 'RSS订阅', settings: '系统设置' },
                         chat: { emptyTitle: '今天想研究点什么？', emptyBody: '可以直接向我提问，或者输入关键词进行语义搜索。' },
                         docs: {
                             title: '文档管理', subtitle: '支持拖拽文件上传，自动分析摘要与实体', filter: '过滤文档...',
@@ -3532,7 +3811,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             empty: '当前目录没有匹配文档', page: '第', total: '共', prev: '上一页', next: '下一页'
                         },
                         settings: {
-                            title: '模型配置', subtitle: '管理非敏感 Provider 与业务流策略，密钥仍只通过环境变量配置',
+                            title: '系统设置', subtitle: '管理知识库名称、环境功能开关、模型策略与审计信息',
+                            basic: '基础设置', features: '功能开关', appName: '知识库名称', appTitle: '页面标题', appSubtitle: '副标题', appLogo: 'Logo 路径',
+                            featureHint: '关闭功能会隐藏菜单，并让对应 API 返回 403。',
                             refresh: '刷新', save: '保存配置', secretNote: '这里不会显示或保存 API Key，只显示环境变量名和是否已配置。',
                             deploymentMode: '部署模式', deploymentModeHint: '一键切换全局策略；保存前会自动备份 llm_runtime.yaml。',
                             secretFile: '密钥文件', systemdDropin: 'systemd 配置', setupCommand: '一键配置命令',
@@ -3551,7 +3832,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         common: { edit: '编辑', save: '保存' }
                     },
                     en: {
-                        nav: { chat: 'Chat', graph: 'Knowledge Graph', docs: 'Documents', candidates: 'Candidates', wechat: 'WeChat Sources', rss: 'RSS Feeds', settings: 'LLM Settings' },
+                        nav: { chat: 'Chat', graph: 'Knowledge Graph', docs: 'Documents', candidates: 'Candidates', wechat: 'WeChat Sources', rss: 'RSS Feeds', settings: 'System Settings' },
                         chat: { emptyTitle: 'What do you want to research today?', emptyBody: 'Ask a question directly, or enter keywords for semantic search.' },
                         docs: {
                             title: 'Documents', subtitle: 'Drag files here, analyze summaries and entities automatically', filter: 'Filter documents...',
@@ -3563,7 +3844,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             empty: 'No matching documents in this folder', page: 'Page', total: 'Total', prev: 'Prev', next: 'Next'
                         },
                         settings: {
-                            title: 'LLM Settings', subtitle: 'Manage non-sensitive providers and per-flow policies. Secrets stay in environment variables.',
+                            title: 'System Settings', subtitle: 'Manage branding, environment feature switches, model policies, and audit data.',
+                            basic: 'Basic Settings', features: 'Feature Switches', appName: 'Knowledge Base Name', appTitle: 'Page Title', appSubtitle: 'Subtitle', appLogo: 'Logo Path',
+                            featureHint: 'Disabled features are hidden from navigation and blocked by API gates.',
                             refresh: 'Refresh', save: 'Save Config', secretNote: 'API keys are never shown or saved here. Only env var names and configured status are displayed.',
                             deploymentMode: 'Deployment Mode', deploymentModeHint: 'Switch global policy presets. llm_runtime.yaml is backed up before changes.',
                             secretFile: 'Secret file', systemdDropin: 'systemd drop-in', setupCommand: 'One-shot setup command',
@@ -3587,9 +3870,60 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     localStorage.setItem('kb_ui_lang', v);
                     document.documentElement.lang = v === 'en' ? 'en' : 'zh';
                 }, { immediate: true });
+                watch(webuiApp, (app) => {
+                    if(app?.title) document.title = app.title;
+                }, { immediate: true, deep: true });
+
+                const loadWebuiConfig = async () => {
+                    loadingWebuiConfig.value = true;
+                    try {
+                        const res = await fetch('/api/webui/config');
+                        const data = await res.json();
+                        if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        webuiConfig.value = { app: data.app || webuiConfig.value.app, features: data.features || webuiConfig.value.features };
+                    } catch(e) {
+                        showToast(`加载系统设置失败: ${e.message}`, 'error', 7000);
+                    } finally {
+                        loadingWebuiConfig.value = false;
+                    }
+                };
+
+                const saveWebuiConfig = async () => {
+                    savingWebuiConfig.value = true;
+                    try {
+                        const res = await fetch('/api/webui/config', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(webuiConfig.value)
+                        });
+                        const data = await res.json();
+                        if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        webuiConfig.value = { app: data.app || webuiConfig.value.app, features: data.features || webuiConfig.value.features };
+                        showToast('系统设置已保存', 'success');
+                    } catch(e) {
+                        showToast(`保存系统设置失败: ${e.message}`, 'error', 7000);
+                    } finally {
+                        savingWebuiConfig.value = false;
+                    }
+                };
+
+                const saveAllSettings = async () => {
+                    await saveWebuiConfig();
+                    if(featureEnabled('llm_settings')) await saveLlmConfig();
+                };
+
+                const refreshAllSettings = async () => {
+                    await loadWebuiConfig();
+                    if(featureEnabled('llm_settings')) await loadLlmConfig();
+                    if(featureEnabled('llm_audit')) await loadLlmAudit();
+                };
                 
                 // Switch Tab Logic
                 const switchTab = (tab) => {
+                    if(tab !== 'settings' && !featureEnabled(tab === 'docs' ? 'documents' : tab)) {
+                        showToast('该功能已在系统设置中关闭', 'warning');
+                        return;
+                    }
                     activeTab.value = tab;
                     mobileMenuOpen.value = false;
                     if(previewOpen.value) closePreview();
@@ -3605,6 +3939,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     } else if(tab === 'rss') {
                         loadRssFeeds();
                     } else if(tab === 'settings') {
+                        loadWebuiConfig();
                         loadLlmConfig();
                         loadLlmAudit();
                     }
@@ -3737,6 +4072,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const selectedTranslationModel = computed(() => translationModels.value.find(m => m.provider === translationProvider.value) || null);
                 const llmModeLabel = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.label) || llmMode.value || 'custom');
                 const llmModeDescription = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.description) || '');
+                const fileImportFlow = computed(() => llmFlows.value.find(f => f.name === 'file_import_structure') || null);
+                const fileImportProviderChain = computed(() => (fileImportFlow.value?.providers || []).map(name => {
+                    const p = llmProviders.value.find(item => item.name === name);
+                    return p ? `${name} / ${p.model}` : name;
+                }).join(' -> '));
 
                 const normalizeLlmProviders = (items) => (items || []).map(p => ({
                     ...p,
@@ -4859,16 +5199,30 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 };
                 const uploadFiles = async (files) => {
                     showToast(`正在上传 ${files.length} 个文件...`, "info");
+                    const summaries = [];
                     for(let i=0; i<files.length; i++) {
                         const fd = new FormData();
                         fd.append('files', files[i]);
                         try {
-                            await fetch('/api/documents', { method: 'POST', body: fd });
+                            const res = await fetch('/api/documents', { method: 'POST', body: fd });
+                            const data = await res.json();
+                            if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                            const processed = data.processed || [];
+                            for(const item of processed) {
+                                summaries.push(item);
+                                if(item.processed) {
+                                    const model = item.llm?.provider ? ` · ${item.llm.provider} / ${item.llm.model || '-'}` : '';
+                                    showToast(`已处理 ${item.filename}${model}`, 'success', 7000);
+                                } else {
+                                    showToast(`上传成功但处理失败 ${item.filename}: ${item.error || item.message || '未知错误'}`, 'warning', 9000);
+                                }
+                            }
                         } catch(e) {
                             console.error("Upload error", e);
+                            showToast(`上传失败 ${files[i].name}: ${e.message}`, 'error', 9000);
                         }
                     }
-                    showToast("上传及处理请求已发送", "success");
+                    if(!summaries.length) showToast("上传请求已发送", "success");
                     loadDocs();
                 };
 
@@ -5021,7 +5375,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         }
                     });
 
-                    const root = { name: 'Sunoxi KB', children: [] };
+                    const root = { name: webuiApp.value.name || 'Knowledge Base', children: [] };
                     const folders = new Map();
                     const ensureFolder = (path) => {
                         if(!path || path === 'root') {
@@ -5210,25 +5564,31 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 };
 
                 // Resize observer for graph
-                onMounted(() => {
+                onMounted(async () => {
                     window.addEventListener('resize', () => {
                         if(activeTab.value === 'graph' && chartInstance) chartInstance.resize();
                     });
                     
                     // Initial load stats & sidebar counts
+                    await loadWebuiConfig().catch(()=>{});
                     fetch('/api/stats').then(r=>r.json()).then(s => stats.value = s).catch(()=>{});
-                    loadCandidates().catch(()=>{});
-                    loadBatchImportStatus().then(job => { if(job.running) startBatchImportPolling(); }).catch(()=>{});
-                    loadWechatSources().catch(()=>{});
-                    loadRssFeeds().catch(()=>{});
+                    if(featureEnabled('candidates')) {
+                        loadCandidates().catch(()=>{});
+                        loadBatchImportStatus().then(job => { if(job.running) startBatchImportPolling(); }).catch(()=>{});
+                    }
+                    if(featureEnabled('wechat')) loadWechatSources().catch(()=>{});
+                    if(featureEnabled('rss')) loadRssFeeds().catch(()=>{});
                     loadTranslationModels().catch(()=>{});
-                    loadLlmConfig().catch(()=>{});
-                    loadLlmBackups().catch(()=>{});
-                    loadLlmAudit().catch(()=>{});
+                    if(featureEnabled('llm_settings')) {
+                        loadLlmConfig().catch(()=>{});
+                        loadLlmBackups().catch(()=>{});
+                    }
+                    if(featureEnabled('llm_audit')) loadLlmAudit().catch(()=>{});
                 });
 
                 return {
                     activeTab, switchTab, theme, toggleTheme, uiLang, t, mobileMenuOpen, graphLayout, graphSearchText, associationReport, loadingAssociations, loadAssociations,
+                    webuiConfig, webuiApp, webuiFeatures, featureEnabled, loadingWebuiConfig, savingWebuiConfig, loadWebuiConfig, saveWebuiConfig, saveAllSettings, refreshAllSettings,
                     toasts, 
                     chatInput, chatHistory, isWaiting, submitChat, chatAnswerMode, renderMarkdown, ask,
                     docs, filteredDocs, folderRows, visibleDocs, pagedVisibleDocs, docsPage, docsPageSize, docsTotalPages, selectedDocFolder, loadingDocs, docSearchText, loadDocs, qualityBadCount, repairingQuality, repairDocQuality, repairAllQuality, deleteDoc,
@@ -5241,6 +5601,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     previewOpen, previewLoading, previewContent, previewDocName, previewRelated, previewAssociation, previewMode, candidateWorkbenchItem, previewDoc, closePreview, isEditingDoc, saveDocContent, saveCandidateReviewInline,
                     translationModels, translationProvider, selectedTranslationModel, isRetranslating, retranslateDoc,
                     llmProviders, llmFlows, llmBackups, llmSecretSetup, llmMode, llmModeOptions, llmModeLabel, llmModeDescription, settingLlmMode,
+                    fileImportFlow, fileImportProviderChain,
                     llmAudit, loadingLlmAudit, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
                     loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, restoreLlmBackup, testLlmProvider, objectEntries,
                     addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel,
@@ -5295,7 +5656,12 @@ def main():
     args = parser.parse_args()
 
     print()
-    print("Sunoxi KB Web UI")
+    app_name = WEBUI_CONFIG_DEFAULTS["app"]["name"]
+    try:
+        app_name = _webui_config_payload()["app"].get("name") or app_name
+    except Exception:
+        pass
+    print(f"{app_name} Web UI")
     print(f"URL: http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")
     print()

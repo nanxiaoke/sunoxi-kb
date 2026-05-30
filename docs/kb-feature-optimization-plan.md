@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: planning, pending user confirmation on 2026-05-30.
+Status: Task A in progress as of 2026-05-30.
 
 ## Decision
 
@@ -124,31 +124,42 @@ features:
 
 ### Task A Subtasks
 
-- [ ] Add backend WebUI settings loader with defaults.
-- [ ] Add `GET /api/webui/config`.
-- [ ] Add `PATCH /api/webui/config` with validation and backup.
-- [ ] Add feature-gate helper for backend routes.
-- [ ] Gate RSS, WeChat, candidates, upload, URL import, graph, LLM settings, and LLM audit routes.
-- [ ] Refactor navigation so disabled features are hidden.
-- [ ] Rename the current settings navigation from LLM Settings/模型配置 to System Settings/系统设置.
-- [ ] Add Basic Settings UI for knowledge-base branding.
-- [ ] Apply configured branding to document title, sidebar header, and startup output.
-- [ ] Add Feature Switches UI.
-- [ ] Keep existing model provider/flow editor inside System Settings.
-- [ ] Show `file_import_structure` provider chain and active mode near upload controls.
-- [ ] Make upload API return generated wiki path, processing stage, and LLM metadata.
-- [ ] Improve upload error messages for unsupported format, file size, parsing failure, missing key, provider failure, and LLM failure.
-- [ ] Run file upload E2E smoke for `.txt`.
-- [ ] Run file upload E2E smoke for `.md`.
-- [ ] Run file upload E2E smoke for `.pdf`.
-- [ ] Run file upload E2E smoke for `.docx`.
-- [ ] Verify pure online mode uses only DeepSeek for file upload processing.
-- [ ] Verify pure local mode uses only local Gemma/Ollama for file upload processing.
-- [ ] Verify hybrid mode reports the actual provider/fallback path.
-- [ ] Update progress notes and user-facing docs for settings and upload behavior.
+- [x] Add backend WebUI settings loader with defaults.
+- [x] Add `GET /api/webui/config`.
+- [x] Add `PATCH /api/webui/config` with validation and backup.
+- [x] Add feature-gate helper for backend routes.
+- [x] Gate RSS, WeChat, candidates, upload, URL import, graph, LLM settings, and LLM audit routes.
+- [x] Refactor navigation so disabled features are hidden.
+- [x] Rename the current settings navigation from LLM Settings/模型配置 to System Settings/系统设置.
+- [x] Add Basic Settings UI for knowledge-base branding.
+- [x] Apply configured branding to document title, sidebar header, and startup output.
+- [x] Add Feature Switches UI.
+- [x] Keep existing model provider/flow editor inside System Settings.
+- [x] Show `file_import_structure` provider chain and active mode near upload controls.
+- [x] Make upload API return generated wiki path, processing stage, and LLM metadata.
+- [x] Improve upload error messages for unsupported format, file size, parsing failure, missing key, provider failure, and LLM failure.
+- [x] Run file upload E2E smoke for `.txt`.
+- [x] Run file upload E2E smoke for `.md`.
+- [x] Run file upload E2E smoke for `.pdf`.
+- [x] Run file upload E2E smoke for `.docx`.
+- [x] Verify pure online mode uses only DeepSeek for file upload processing.
+- [x] Verify pure local mode uses only local Gemma/Ollama for file upload processing.
+- [x] Verify hybrid mode reports the actual provider/fallback path.
+- [x] Update progress notes and user-facing docs for settings and upload behavior.
 
-### Confirmation Needed
+### Implementation Progress
 
-- Confirm the Task A scope before implementation starts.
-- Confirm whether feature switches should default to all enabled for backward compatibility. Current recommendation: yes.
-- Confirm whether branding changes should apply immediately after save without a server restart. Current recommendation: yes for WebUI-visible text; startup console text updates on next restart.
+- 2026-05-30: User confirmed Task A scope. Feature switches default to enabled, branding updates should apply immediately in the WebUI, and startup console branding can update on next restart.
+- 2026-05-30: Added `config/webui.yaml` runtime config support with defaults and local backup-on-save behavior.
+- 2026-05-30: Added WebUI settings APIs: `GET /api/webui/config` and `PATCH /api/webui/config`.
+- 2026-05-30: Added backend feature gates for upload, URL import, chat/search, graph, RSS, WeChat, candidates, LLM settings, and LLM audit.
+- 2026-05-30: Renamed the settings menu to System Settings / 系统设置 and added Basic Settings plus Feature Switches panels.
+- 2026-05-30: Wired configurable branding into the sidebar/header, browser title, and startup console output.
+- 2026-05-30: Kept existing LLM provider/flow configuration inside System Settings and gated it behind the `llm_settings` switch.
+- 2026-05-30: Added upload panel visibility gates and displayed the active `file_import_structure` provider chain/mode near upload controls.
+- 2026-05-30: Enhanced upload API auto-processing results with stage, generated wiki path, and LLM metadata when available.
+- 2026-05-30: Smoke verification passed for Python compile, WebUI config API, feature-gated 403 responses, and frontend script syntax.
+- 2026-05-30: File upload E2E smoke passed in temporary knowledge-base directories for `.txt`, `.md`, `.pdf`, and `.docx`; each generated wiki output and searchable indexes without polluting the real library.
+- 2026-05-30: Upload mode routing verified. Pure local used `local_gemma4 / gemma4:e4b`; pure online selected `deepseek_flash` and failed with `missing API key env: DEEPSEEK_API_KEY` without local fallback; default hybrid reported the actual local provider used.
+- 2026-05-30: Improved upload processing failures so missing key/provider/LLM errors are returned in the API response instead of only appearing in backend logs.
+- 2026-05-30: Added `docs/webui-settings-and-upload.md` and linked it from the README.

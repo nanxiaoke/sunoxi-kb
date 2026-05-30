@@ -42,6 +42,7 @@ class BatchProcessor:
         self.progress_file = self.base_dir / "batch_progress.json"
         self.llm = LLMService()
         self.model = self.llm.config.provider(self.llm.config.flow("file_import_structure").providers[0]).model
+        self.last_error: Optional[str] = None
         
         # 加载处理进度
         self.processed_files = self._load_progress()
@@ -228,6 +229,7 @@ class BatchProcessor:
     
     def process_file(self, file_info: Dict) -> Optional[Path]:
         """处理单个raw文件"""
+        self.last_error = None
         filepath = file_info["path"]
         file_key = str(filepath)
         
@@ -261,7 +263,8 @@ class BatchProcessor:
             else:
                 content = filepath.read_text(encoding='utf-8')
         except Exception as e:
-            logger.error(f"  读取失败: {e}")
+            self.last_error = f"读取失败: {e}"
+            logger.error(f"  {self.last_error}")
             return None
         
         metadata, content_body = self._parse_simple_frontmatter(content)
@@ -362,7 +365,9 @@ class BatchProcessor:
         elapsed = time.time() - start_time
         
         if not result_text:
-            logger.error(f"  ❌ AI处理失败（无响应）")
+            detail = llm_meta.get("error") or llm_meta.get("status") or "无响应"
+            self.last_error = f"AI处理失败: {detail}"
+            logger.error(f"  ❌ {self.last_error}")
             return None
         
         logger.info(f"  ✅ AI响应: {len(result_text)} 字符 (耗时{elapsed:.1f}秒)")

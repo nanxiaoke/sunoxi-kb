@@ -75,6 +75,8 @@ Windows 兼容入口：
 
 完整部署、更新和排错说明见 [docs/git-deployment.md](docs/git-deployment.md)。
 
+WebUI 系统设置、功能开关和文件上传链路说明见 [docs/webui-settings-and-upload.md](docs/webui-settings-and-upload.md)。
+
 默认依赖只覆盖 WebUI、在线模型、候选池、RSS/URL/文件导入等核心功能。语义向量依赖较大，需要时再安装：
 
 ```bash

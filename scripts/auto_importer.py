@@ -200,7 +200,7 @@ class AutoImporter:
             if result:
                 return True, str(result)
             else:
-                return False, "AI处理失败（返回空）"
+                return False, getattr(bp, "last_error", None) or "AI处理失败（返回空）"
 
         except Exception as e:
             return False, f"异常: {e}"

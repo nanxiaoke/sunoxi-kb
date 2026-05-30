@@ -15,6 +15,7 @@ venv/
 *.env
 llm.env
 config/llm.env
+config/webui.yaml
 
 # Personal source configuration
 rss_feeds.json

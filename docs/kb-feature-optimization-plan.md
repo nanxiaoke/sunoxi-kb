@@ -301,7 +301,7 @@ Task F: Post-import reprocessing.
 - [x] Make rule-based quality repair support dry-run preview.
 - [x] Add WebUI confirmation before applying single-document quality repair.
 - [ ] Add explicit single-document re-summary/re-keypoints/re-entities action metadata.
-- [ ] Add preview/diff UI for LLM retranslation.
+- [x] Add preview/diff UI for LLM retranslation.
 - [ ] Add batch reprocessing only after single-document flows are safe.
 
 ### Implementation Progress
@@ -309,3 +309,4 @@ Task F: Post-import reprocessing.
 - 2026-05-30: Task F started after Task E first pass completed. First change targets the existing quality repair action so re-summary/re-keypoints/re-entities no longer writes immediately.
 - 2026-05-30: `POST /api/documents/<path>/repair-quality` now supports `dry_run: true`, returning planned replacement sections and before/after quality status without modifying the document.
 - 2026-05-30: WebUI single-document quality repair now requests a dry-run preview first and asks for confirmation with issue labels plus generated summary preview before applying changes.
+- 2026-05-30: `POST /api/documents/<path>/translate` now supports `dry_run: true`, returning generated retranslation previews and LLM metadata without writing. WebUI retranslation now previews first and asks for confirmation before applying.

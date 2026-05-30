@@ -1750,6 +1750,7 @@ def retranslate_document(relpath: str):
     if provider_name not in {"online", "local"}:
         return jsonify({"error": "provider must be online or local"}), 400
     model = (data.get("model") or "").strip()
+    dry_run = bool(data.get("dry_run"))
 
     try:
         old_text = wiki_file.read_text(encoding="utf-8", errors="ignore")
@@ -1780,14 +1781,25 @@ def retranslate_document(relpath: str):
             "chunks": result.get("llm_chunks", []),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         })
-        wiki_file.write_text(new_text, encoding="utf-8")
-        _rebuild_index()
+        if not dry_run:
+            wiki_file.write_text(new_text, encoding="utf-8")
+            _rebuild_index()
         return jsonify({
             "path": relpath,
             "title": result["title"],
             "provider": result["provider"],
             "model": result["model"],
-            "size_kb": round(wiki_file.stat().st_size / 1024, 1),
+            "dry_run": dry_run,
+            "changed": new_text != old_text,
+            "size_kb": round((len(new_text.encode("utf-8")) if dry_run else wiki_file.stat().st_size) / 1024, 1),
+            "preview": {
+                "summary": result.get("summary", "")[:260],
+                "keypoints": result.get("keypoints", "")[:360],
+                "entities": result.get("entities", "")[:220],
+                "translation": result.get("translation", "")[:500],
+            } if dry_run else None,
+            "llm": result.get("llm_result", {}),
+            "chunk_count": result.get("chunk_count", len(result.get("llm_chunks", []))),
         })
     except Exception as e:
         logger.error(f"Retranslate failed for {relpath}: {e}")
@@ -4440,12 +4452,26 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         return;
                     }
                     isRetranslating.value = true;
-                    showToast(`正在使用 ${translationProvider.value === 'online' ? '在线模型' : '本地模型'} 重新翻译...`, 'info', 6000);
+                    showToast(`正在使用 ${translationProvider.value === 'online' ? '在线模型' : '本地模型'} 生成重翻译预览...`, 'info', 6000);
                     try {
+                        const previewRes = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}/translate`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ provider: translationProvider.value, model: selected.model || '', dry_run: true })
+                        });
+                        const preview = await previewRes.json();
+                        if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
+                        const translationPreview = (preview.preview?.translation || preview.preview?.summary || '').slice(0, 220);
+                        const confirmMsg = `确认应用重新翻译？\n模型：${preview.provider || translationProvider.value} / ${preview.model || selected.model || '-'}\nchunks：${preview.chunk_count || 0}\n预览：${translationPreview}\n\n确认后会再次调用模型并写入文档。`;
+                        if(!confirm(confirmMsg)) {
+                            showToast('已取消重新翻译写入', 'info');
+                            return;
+                        }
+                        showToast('正在应用重新翻译...', 'info', 6000);
                         const res = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}/translate`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ provider: translationProvider.value, model: selected.model || '' })
+                            body: JSON.stringify({ provider: translationProvider.value, model: selected.model || '', dry_run: false })
                         });
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

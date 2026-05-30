@@ -36,6 +36,19 @@ Then open:
 http://127.0.0.1:5080
 ```
 
+The default launcher binds WebUI to all network interfaces. Other machines on
+the same LAN can open:
+
+```text
+http://<this-windows-machine-ip>:5080
+```
+
+To make WebUI localhost-only:
+
+```bash
+HOST=127.0.0.1 ./packaging/windows/start_webui.sh
+```
+
 ## Online-Only Mode
 
 For a Windows portable deployment without Ollama:

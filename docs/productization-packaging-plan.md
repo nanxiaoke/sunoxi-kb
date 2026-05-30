@@ -73,7 +73,7 @@ karpathy-kb/
 - `packaging/common/install_deps.sh` creates `.venv` under the checkout root and installs `requirements.txt`.
 - `packaging/common/install_deps.sh --with-embeddings` additionally installs `requirements-embeddings.txt` for semantic vector rebuilds.
 - `packaging/common/configure_key.sh` writes `config/llm.env`.
-- `packaging/common/start_webui.sh` loads `config/llm.env` into the current process environment, starts `scripts/web_ui.py`, and opens `http://127.0.0.1:5080`.
+- `packaging/common/start_webui.sh` loads `config/llm.env` into the current process environment, starts `scripts/web_ui.py` bound to `0.0.0.0` by default, and opens the local browser at `http://127.0.0.1:5080`.
 - `packaging/windows/*.sh` are compatibility wrappers around `packaging/common/*.sh`.
 - Secrets stay out of source files and release manifests.
 - For pure online mode, no local Ollama is required.
@@ -104,7 +104,7 @@ karpathy-kb/
   - `./packaging/common/install_deps.sh`
   - `./packaging/common/configure_key.sh --key "..."`
   - `./packaging/common/start_webui.sh`
-- WebUI opens at `http://127.0.0.1:5080`.
+- WebUI opens locally at `http://127.0.0.1:5080` and is reachable on the LAN at `http://<deployment-machine-ip>:5080` unless `HOST=127.0.0.1` is specified.
 - LLM Settings can switch between pure local, pure online, and hybrid.
 - No API key, article data, index, embedding, cache, log, backup, or release artifact is tracked in git.
 

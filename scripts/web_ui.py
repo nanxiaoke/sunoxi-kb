@@ -4,9 +4,9 @@ Sunoxi知识库 — Web UI
 Flask-based web interface with document management, search, and knowledge graph.
 
 Usage:
-  python3 web_ui.py                 # Start on default port 5080
+  python3 web_ui.py                 # Start on default port 5080, bind to all interfaces
   python3 web_ui.py --port 9090     # Custom port
-  python3 web_ui.py --host 0.0.0.0  # Bind to all interfaces
+  python3 web_ui.py --host 127.0.0.1  # Localhost-only
 """
 
 import os
@@ -5289,7 +5289,7 @@ def main():
     _configure_console_output()
 
     parser = argparse.ArgumentParser(description="Sunoxi知识库 Web UI")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind address")
+    parser.add_argument("--host", default="0.0.0.0", help="Bind address")
     parser.add_argument("--port", type=int, default=5080, help="Listen port")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     args = parser.parse_args()

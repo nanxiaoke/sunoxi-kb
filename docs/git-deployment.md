@@ -69,6 +69,18 @@ Open:
 http://127.0.0.1:5080
 ```
 
+By default the WebUI binds to `0.0.0.0`, so other machines on the same LAN can open:
+
+```text
+http://<deployment-machine-ip>:5080
+```
+
+To restrict WebUI to the current machine only:
+
+```bash
+HOST=127.0.0.1 ./packaging/common/start_webui.sh
+```
+
 ## Windows Notes
 
 Run the commands in Git Bash from the repository root.

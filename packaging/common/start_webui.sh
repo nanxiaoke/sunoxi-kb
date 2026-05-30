@@ -11,7 +11,7 @@ fi
 
 VENV="$PROJECT_ROOT/.venv"
 ENV_FILE="$PROJECT_ROOT/config/llm.env"
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-5080}"
 
 if [ -x "$VENV/Scripts/python.exe" ]; then
@@ -30,8 +30,17 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-URL="http://$HOST:$PORT"
-echo "Starting Karpathy KB WebUI at $URL"
+if [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; then
+  URL_HOST="${OPEN_HOST:-127.0.0.1}"
+else
+  URL_HOST="${OPEN_HOST:-$HOST}"
+fi
+URL="http://$URL_HOST:$PORT"
+echo "Starting Karpathy KB WebUI on $HOST:$PORT"
+echo "Opening local URL: $URL"
+if [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; then
+  echo "LAN access: http://<this-machine-ip>:$PORT"
+fi
 
 if command -v powershell.exe >/dev/null 2>&1; then
   powershell.exe -NoProfile -Command "Start-Process '$URL'" >/dev/null 2>&1 || true

@@ -153,7 +153,20 @@ Result:
 
 ## Deferred Task: Formal Distribution Packaging (Windows & Linux)
 
-Status: legacy/deferred.
+Status: frozen/deferred as of 2026-05-30.
+
+Decision:
+
+- Git-based Windows/Linux green deployment V1 is accepted as the current deployment baseline.
+- The next workstream moves back to knowledge-base product/function optimization.
+- The following productization tasks are intentionally paused and placed last:
+  - Cross-platform regression script.
+  - Windows FAQ/troubleshooting expansion.
+  - Runtime data export/import migration tooling.
+  - Formal Windows/Linux release archives.
+  - Windows service startup integration.
+  - Docker distribution package.
+- Resume these only after the knowledge-base feature optimization workstream stabilizes.
 
 This task covers downloadable release artifacts after git-based deployment is stable.
 

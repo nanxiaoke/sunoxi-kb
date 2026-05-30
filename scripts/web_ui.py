@@ -924,6 +924,7 @@ def search():
                 "latency": result.get("latency"),
                 "cache_hit": result.get("cache_hit", False),
                 "context_preview": result.get("context_preview", ""),
+                "diagnostics": result.get("diagnostics", {}),
                 "answer_mode": result.get("answer_mode", ""),
                 "llm": result.get("llm"),
             })
@@ -2562,25 +2563,27 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <div :class="['chat-bubble shadow-sm', msg.role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-ai']">
                                 <div v-if="msg.role === 'user'" class="whitespace-pre-wrap">{{ msg.content }}</div>
                                 <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-                                <div v-if="msg.role === 'ai' && (msg.latency || msg.cache_hit || msg.citations?.length)" class="mt-3 flex flex-wrap gap-2 text-xs opacity-70">
+                                <div v-if="msg.role === 'ai' && (msg.latency || msg.cache_hit || msg.citations?.length || msg.diagnostics?.query_tokens?.length)" class="mt-3 flex flex-wrap gap-2 text-xs opacity-70">
                                     <span v-if="msg.latency" class="badge badge-ghost badge-sm">⏱ {{ msg.latency }}s</span>
                                     <span v-if="msg.cache_hit" class="badge badge-success badge-sm">缓存命中</span>
                                     <span v-if="msg.citations?.length" class="badge badge-info badge-sm">{{ msg.citations.length }} 个引用</span>
                                     <span v-if="msg.answer_mode" class="badge badge-outline badge-sm">{{ msg.answer_mode === 'extractive' ? '极速答案' : '模型生成' }}</span>
                                     <span v-if="msg.llm?.provider" class="badge badge-outline badge-sm">{{ msg.llm.provider }} / {{ msg.llm.model }}</span>
+                                    <span v-if="msg.diagnostics?.query_tokens?.length" class="badge badge-outline badge-sm">{{ msg.diagnostics.query_tokens.slice(0, 4).join(' · ') }}</span>
                                 </div>
                                 
                                 <!-- Sources Cards -->
                                 <div v-if="msg.sources && msg.sources.length > 0" class="mt-4 pt-3 border-t border-base-content/10 flex flex-col gap-2">
                                     <div class="text-xs opacity-70 font-semibold mb-1">📚 参考来源</div>
                                     <div class="flex flex-wrap gap-2">
-                                        <div v-for="src in msg.sources" :key="src.path" @click="previewDoc(src.path)" class="bg-base-100/50 hover:bg-base-100 rounded-lg p-2 text-sm cursor-pointer border border-base-content/10 transition-colors flex items-center gap-2 max-w-full">
+                                        <div v-for="src in msg.sources" :key="src.path" @click="previewDoc(src.path)" class="bg-base-100/50 hover:bg-base-100 rounded-lg p-2 text-sm cursor-pointer border border-base-content/10 transition-colors flex items-start gap-2 max-w-full">
                                             <span class="text-lg">📄</span>
                                             <div class="truncate flex-1">
                                                 <div class="truncate font-medium">{{ src.title }}</div>
                                                 <div class="text-xs opacity-60 flex gap-2">
                                                     <span class="text-primary">{{ src.score ? src.score.toFixed(1) : '' }}</span>
                                                 </div>
+                                                <div v-if="src.matched_snippets?.length" class="text-xs opacity-70 mt-1 max-h-10 overflow-hidden whitespace-normal">{{ src.matched_snippets[0] }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -4043,6 +4046,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             latency: data.latency,
                             cache_hit: data.cache_hit,
                             context_preview: data.context_preview,
+                            diagnostics: data.diagnostics || {},
                             answer_mode: data.answer_mode,
                             llm: data.llm,
                             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})

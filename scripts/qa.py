@@ -576,7 +576,7 @@ class KnowledgeBaseQA:
             index_sig = str(int(index_file.stat().st_mtime))
         except Exception:
             index_sig = "noindex"
-        return f"v3:{index_sig}:{max_docs}:{answer_mode}:{question.strip().lower()}"
+        return f"v4:{index_sig}:{max_docs}:{answer_mode}:{question.strip().lower()}"
 
     def answer_question(self, question: str, max_docs: int = 4, use_cache: bool = True, answer_mode: str = "auto") -> Dict[str, Any]:
         """回答问题（主接口，含缓存）。
@@ -654,11 +654,17 @@ class KnowledgeBaseQA:
                     "title": doc.get("title", ""),
                     "summary": doc.get("summary", "")[:150],
                     "path": doc.get("path", ""),
-                    "score": doc.get("score", 0)
+                    "score": doc.get("score", 0),
+                    "matched_snippets": (doc.get("matched_snippets") or [])[:3],
                 }
                 for doc in documents
             ],
             "citations": citations,
+            "diagnostics": {
+                "query_tokens": query_tokens[:12],
+                "document_count": len(documents),
+                "top_score": documents[0].get("score", 0) if documents else 0,
+            },
             "context_preview": context[:500] + "..." if len(context) > 500 else context,
             "latency": round(elapsed, 2),
             "timestamp": datetime.now().isoformat(),

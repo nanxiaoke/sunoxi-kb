@@ -118,6 +118,8 @@ def check_qa(qa: KnowledgeBaseQA, case: SmokeCase) -> list[str]:
 
     if result.get("answer_mode") != "extractive":
         errors.append(f"{case.query}: answer_mode={result.get('answer_mode')!r}")
+    if not result.get("diagnostics", {}).get("query_tokens"):
+        errors.append(f"{case.query}: QA diagnostics missing query tokens")
     if not docs:
         errors.append(f"{case.query}: QA returned no documents")
     elif not _contains_any(docs[0].get("title", ""), case.title_any):
@@ -125,6 +127,8 @@ def check_qa(qa: KnowledgeBaseQA, case: SmokeCase) -> list[str]:
             f"{case.query}: unexpected QA top doc {docs[0].get('title')!r}; "
             f"expected one of {case.title_any}"
         )
+    elif case.require_snippet and not docs[0].get("matched_snippets"):
+        errors.append(f"{case.query}: QA document missing matched snippets")
 
     if case.answer_all:
         missing = _missing_all(answer, case.answer_all)

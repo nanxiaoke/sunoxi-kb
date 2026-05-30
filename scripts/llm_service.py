@@ -173,13 +173,22 @@ class LLMService:
 
     def _provider_client(self, cfg: ProviderConfig):
         if cfg.type == "ollama":
-            return OllamaProvider(model_name=cfg.model, base_url=cfg.base_url or "http://127.0.0.1:11434")
+            return OllamaProvider(
+                model_name=cfg.model,
+                base_url=cfg.base_url or "http://127.0.0.1:11434",
+                timeout_sec=cfg.timeout_sec,
+            )
         if cfg.type == "openai_compatible":
             api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
             api_key = api_key or os.environ.get("KB_LLM_API_KEY", "")
             if not api_key:
                 raise RuntimeError(f"missing API key env: {cfg.api_key_env or 'KB_LLM_API_KEY'}")
-            return OpenAIProvider(model_name=cfg.model, base_url=cfg.base_url, api_key=api_key)
+            return OpenAIProvider(
+                model_name=cfg.model,
+                base_url=cfg.base_url,
+                api_key=api_key,
+                timeout_sec=cfg.timeout_sec,
+            )
         raise ValueError(f"Unsupported provider type: {cfg.type}")
 
     def chat(
@@ -278,4 +287,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

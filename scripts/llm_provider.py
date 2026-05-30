@@ -29,9 +29,10 @@ class LLMProvider:
 
 class OllamaProvider(LLMProvider):
     """Ollama API 客户端（强制流式以解决超时，剥离思考过程）"""
-    def __init__(self, model_name: str, base_url: str = "http://localhost:11434", **kwargs):
+    def __init__(self, model_name: str, base_url: str = "http://localhost:11434", timeout_sec: int = 120, **kwargs):
         super().__init__(model_name, **kwargs)
         self.base_url = base_url.rstrip("/")
+        self.timeout_sec = max(1, int(timeout_sec or 120))
         self.session = requests.Session()
         
     def _strip_thinking(self, text: str) -> str:
@@ -66,7 +67,7 @@ class OllamaProvider(LLMProvider):
                     __import__('time').sleep(2 ** attempt)  # 退避
                     
                 logger.debug(f"Ollama(Stream): 发送请求至 {url}, 模型={self.model_name}")
-                with self.session.post(url, json=payload, stream=True, timeout=120) as response:
+                with self.session.post(url, json=payload, stream=True, timeout=self.timeout_sec) as response:
                     response.raise_for_status()
                     for line in response.iter_lines():
                         if line:
@@ -96,10 +97,11 @@ class OllamaProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     """OpenAI 兼容 API 客户端 (支持 DeepSeek, Qwen, etc.)"""
-    def __init__(self, model_name: str, base_url: str, api_key: str, **kwargs):
+    def __init__(self, model_name: str, base_url: str, api_key: str, timeout_sec: int = 60, **kwargs):
         super().__init__(model_name, **kwargs)
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.timeout_sec = max(1, int(timeout_sec or 60))
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": f"Bearer {self.api_key}",
@@ -126,7 +128,7 @@ class OpenAIProvider(LLMProvider):
         
         try:
             logger.debug(f"OpenAI API: 发送请求至 {url}, 模型={self.model_name}")
-            response = self.session.post(url, json=payload, timeout=60)
+            response = self.session.post(url, json=payload, timeout=self.timeout_sec)
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]

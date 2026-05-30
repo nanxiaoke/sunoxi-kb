@@ -196,3 +196,29 @@ Task B: Search and QA quality optimization.
 - 2026-05-30: `/api/search` diagnostics now include expanded keyword query tokens so ranking problems can be inspected from the WebUI/API response without attaching a debugger.
 - 2026-05-30: QA responses now carry matched snippets and query diagnostics through to the chat UI, with the QA cache signature bumped so older cached answers do not hide the new metadata. Source cards show the actual matched passage used for grounding, and the chat metadata badges show answer mode, latency, citations, provider/model when present, and core query tokens.
 - 2026-05-30: Search/QA smoke now includes a synthetic uploaded-document case in an isolated temporary knowledge base. This verifies that upload-style wiki pages are searchable, extractive QA can answer from their source body, and ingestion metadata such as hashes/extraction method does not leak into answers.
+
+## Current Planned Task C
+
+Task C: QA performance and runtime behavior.
+
+### Scope
+
+- Reduce surprises around local/online model latency and timeout behavior.
+- Make provider timeout settings actually affect runtime calls.
+- Improve user-facing QA loading, fallback, and error visibility.
+- Keep extractive QA fast and non-LLM by default; keep LLM QA explicitly user-triggered.
+- Add focused smoke checks for routing/timeout metadata where possible without requiring live providers.
+
+### Task C Subtasks
+
+- [x] Audit provider timeout wiring for Ollama and OpenAI-compatible clients.
+- [x] Pass configured `timeout_sec` from `llm_runtime.yaml` into provider HTTP calls.
+- [ ] Surface provider timeout/fallback failures more clearly in WebUI QA responses.
+- [x] Add a lightweight runtime smoke for provider config metadata without live network calls.
+- [ ] Review QA loading states and retry guidance for slow/failing LLM mode.
+
+### Implementation Progress
+
+- 2026-05-30: Task C started after Task B regression baseline landed. First issue found: provider `timeout_sec` was editable in settings and present in `llm_runtime.yaml`, but both Ollama and OpenAI-compatible clients still used hardcoded request timeouts.
+- 2026-05-30: Provider timeout wiring fixed: `LLMService` now passes each provider's configured `timeout_sec` into `OllamaProvider` and `OpenAIProvider`, and both clients use that value for HTTP calls.
+- 2026-05-30: Added `scripts/smoke_llm_runtime.py` to validate provider client construction and timeout wiring without contacting live Ollama/DeepSeek services.

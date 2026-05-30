@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task E first pass complete as of 2026-05-30.
+Status: Task F in progress as of 2026-05-30.
 
 ## Decision
 
@@ -284,3 +284,28 @@ Task E: Knowledge maintenance and cleanup.
 - 2026-05-30: Added `scripts/smoke_association_report.py`, which builds an isolated temporary wiki and verifies duplicate group summary, reason, affected docs, and keep suggestion without touching the real knowledge base.
 - 2026-05-30: Docs tab quality visibility improved with a warning summary, issue breakdown, `only repairable` filter, and per-document issue labels for missing summaries, keypoints, entities, or scan failures.
 - 2026-05-30: Duplicate groups in the association report now provide review-first buttons for every affected document, with the suggested keep document highlighted. Cleanup remains manual until a safe diff/trash flow is added.
+
+## Current Planned Task F
+
+Task F: Post-import reprocessing.
+
+### Scope
+
+- Support re-summary, re-tagging, re-categorization, and re-translation.
+- Start with single-document review-first flows before batch operations.
+- Show preview/diff before applying content changes.
+- Record LLM/rule metadata for each reprocessing pass.
+
+### Task F Subtasks
+
+- [x] Make rule-based quality repair support dry-run preview.
+- [x] Add WebUI confirmation before applying single-document quality repair.
+- [ ] Add explicit single-document re-summary/re-keypoints/re-entities action metadata.
+- [ ] Add preview/diff UI for LLM retranslation.
+- [ ] Add batch reprocessing only after single-document flows are safe.
+
+### Implementation Progress
+
+- 2026-05-30: Task F started after Task E first pass completed. First change targets the existing quality repair action so re-summary/re-keypoints/re-entities no longer writes immediately.
+- 2026-05-30: `POST /api/documents/<path>/repair-quality` now supports `dry_run: true`, returning planned replacement sections and before/after quality status without modifying the document.
+- 2026-05-30: WebUI single-document quality repair now requests a dry-run preview first and asks for confirmation with issue labels plus generated summary preview before applying changes.

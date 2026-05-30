@@ -1202,6 +1202,8 @@ def quality_report():
 
 @app.route("/api/documents/<path:relpath>/repair-quality", methods=["POST"])
 def repair_document_quality(relpath: str):
+    data = request.get_json(silent=True) or {}
+    dry_run = bool(data.get("dry_run"))
     wiki_file = (KB_DIR / "wiki" / relpath).resolve()
     if not str(wiki_file).startswith(str((KB_DIR / "wiki").resolve())):
         return jsonify({"error": "Path traversal denied"}), 403
@@ -1218,11 +1220,18 @@ def repair_document_quality(relpath: str):
     if 'entities_placeholder' in before['issues']:
         new_text = _replace_section(new_text, '🏷️ 实体与概念', sections['entities'])
     changed = new_text != text
-    if changed:
+    if changed and not dry_run:
         wiki_file.write_text(new_text, encoding="utf-8")
         _rebuild_index()
     after = _quality_status_for_content(new_text)
-    return jsonify({"path": relpath, "changed": changed, "before": before, "after": after})
+    return jsonify({
+        "path": relpath,
+        "changed": changed,
+        "dry_run": dry_run,
+        "before": before,
+        "after": after,
+        "sections": sections if dry_run else None,
+    })
 
 
 @app.route("/api/translation/models", methods=["GET"])
@@ -4804,7 +4813,25 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const repairDocQuality = async (path) => {
                     repairingQuality.value = true;
                     try {
-                        const res = await fetch(`/api/documents/${encodeURIComponent(path)}/repair-quality`, { method: 'POST' });
+                        const previewRes = await fetch(`/api/documents/${encodeURIComponent(path)}/repair-quality`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ dry_run: true })
+                        });
+                        const preview = await previewRes.json();
+                        if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
+                        if(!preview.changed) {
+                            showToast('文档无需修复', 'info');
+                            return;
+                        }
+                        const planned = issueText(preview.before?.issues || []);
+                        const summaryPreview = (preview.sections?.summary || '').slice(0, 160);
+                        if(!confirm(`确认应用质量修复？\n文档：${path}\n问题：${planned || '未知'}\n摘要预览：${summaryPreview}`)) return;
+                        const res = await fetch(`/api/documents/${encodeURIComponent(path)}/repair-quality`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ dry_run: false })
+                        });
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                         showToast(data.changed ? '文档质量已修复' : '文档无需修复', data.changed ? 'success' : 'info');

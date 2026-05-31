@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task G in progress as of 2026-05-31.
+Status: Task H in progress as of 2026-05-31.
 
 ## Decision
 
@@ -337,3 +337,25 @@ Task G: Audit and observability enhancements.
 - 2026-05-31: LLM audit supports filtered export with `format=csv` and JSON responses using the same filters.
 - 2026-05-31: System Settings LLM audit panel now includes filter controls plus JSON/CSV export buttons.
 - 2026-05-31: LLM audit items now include `quality_repair` metadata plus a compact `generation_chain` covering import LLM metadata, retranslation, rule-based quality repair, and legacy translation. The audit table and CSV export expose these fields.
+
+## Current Planned Task H
+
+Task H: WebUI usability polish.
+
+### Scope
+
+- Make document preview more useful as an operational knowledge-base surface.
+- Reduce switching between document preview, quality status, and audit panels.
+- Keep dense document lists readable while preserving repair/retry actions.
+
+### Task H Subtasks
+
+- [x] Add document quality and LLM metadata to the document preview API.
+- [x] Show quality, import LLM, retranslation, and quality repair badges in the document preview drawer.
+- [ ] Improve search result and document list actions.
+- [ ] Review mobile drawer layout for dense metadata.
+
+### Implementation Progress
+
+- 2026-05-31: Document preview API now returns a `meta` object with title, category, quality status, import LLM metadata, retranslation metadata, and rule-based quality repair metadata.
+- 2026-05-31: Document preview drawer now shows compact badges for quality state, import LLM chain, retranslation, and quality repair before the markdown body/related-doc recommendations.

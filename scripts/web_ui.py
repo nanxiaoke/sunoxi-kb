@@ -1152,6 +1152,11 @@ def get_document(relpath: str):
         return jsonify({"error": "Not found"}), 404
 
     content = wiki_file.read_text(encoding="utf-8")
+    meta, _body = _split_frontmatter(content)
+    quality = _quality_status_for_content(content)
+    llm_meta = meta.get("llm") if isinstance(meta.get("llm"), dict) else {}
+    retranslation_meta = meta.get("llm_retranslation") if isinstance(meta.get("llm_retranslation"), dict) else {}
+    quality_repair_meta = meta.get("quality_repair") if isinstance(meta.get("quality_repair"), dict) else {}
     related_docs = []
     association_meta = None
     try:
@@ -1180,6 +1185,14 @@ def get_document(relpath: str):
         "path": relpath,
         "name": wiki_file.stem,
         "content": content,
+        "meta": {
+            "title": str(meta.get("title") or wiki_file.stem),
+            "category": str(meta.get("category") or wiki_file.parent.name),
+            "quality": quality,
+            "llm": llm_meta,
+            "llm_retranslation": retranslation_meta,
+            "quality_repair": quality_repair_meta,
+        },
         "size_kb": round(wiki_file.stat().st_size / 1024, 1),
         "modified": datetime.fromtimestamp(wiki_file.stat().st_mtime, tz=timezone.utc).isoformat(),
         "related": related_docs,
@@ -4069,6 +4082,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 <textarea v-if="isEditingDoc" v-model="previewContent" class="w-full h-full p-4 bg-base-100 resize-none outline-none font-mono text-sm leading-relaxed" spellcheck="false"></textarea>
                 
                 <template v-else>
+                    <div v-if="previewMode === 'document'" class="border-b border-base-300 bg-base-200/60 p-4 text-xs">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="badge badge-sm badge-outline">{{ previewMeta.category || '未分类' }}</span>
+                            <span :class="['badge badge-sm', previewMeta.quality?.ok ? 'badge-success' : 'badge-warning']">{{ previewMeta.quality?.ok ? '质量OK' : '质量待修复' }}</span>
+                            <span v-if="previewMeta.llm?.provider" class="badge badge-sm badge-info">{{ previewMeta.llm.flow || 'llm' }} · {{ previewMeta.llm.provider }} / {{ previewMeta.llm.model || '-' }}</span>
+                            <span v-if="previewMeta.llm_retranslation?.provider" class="badge badge-sm badge-secondary">重翻译 · {{ previewMeta.llm_retranslation.provider }} / {{ previewMeta.llm_retranslation.model || '-' }}</span>
+                            <span v-if="previewMeta.quality_repair?.method" class="badge badge-sm badge-accent">质量修复 · {{ previewMeta.quality_repair.method }}</span>
+                        </div>
+                        <div v-if="previewMeta.quality && !previewMeta.quality.ok" class="mt-2 opacity-70">问题：{{ issueText(previewMeta.quality.issues || []) }}</div>
+                    </div>
                     <div v-if="previewRelated.length" class="border-b border-base-300 bg-base-200/60 p-4">
                         <div class="flex items-center justify-between gap-2 mb-3">
                             <div class="font-semibold text-sm">🔗 相关文档推荐</div>
@@ -4385,6 +4408,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const previewDocPath = ref('');
                 const previewRelated = ref([]);
                 const previewAssociation = ref(null);
+                const previewMeta = ref({});
                 const previewMode = ref('document');
                 const candidateWorkbenchItem = ref(null);
                 const isEditingDoc = ref(false);
@@ -4536,6 +4560,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     isEditingDoc.value = false;
                     previewRelated.value = [];
                     previewAssociation.value = null;
+                    previewMeta.value = {};
                     previewMode.value = 'document';
                     candidateWorkbenchItem.value = null;
                 };
@@ -4549,6 +4574,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     previewContent.value = '';
                     previewRelated.value = [];
                     previewAssociation.value = null;
+                    previewMeta.value = {};
                     previewMode.value = 'document';
                     candidateWorkbenchItem.value = null;
                     
@@ -4559,6 +4585,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             previewContent.value = data.content || '';
                             previewRelated.value = data.related || [];
                             previewAssociation.value = data.association || null;
+                            previewMeta.value = data.meta || {};
                         } else {
                             previewContent.value = "无法加载文档内容。";
                         }
@@ -5222,6 +5249,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     isEditingDoc.value = false;
                     previewRelated.value = [];
                     previewAssociation.value = null;
+                    previewMeta.value = {};
                     try {
                         const res = await fetch(`/api/candidates/${encodeURIComponent(id)}`);
                         const data = await res.json();
@@ -6071,7 +6099,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     rssFeeds, loadingRssFeeds, syncingRss, rssSyncResult, rssNewForm, loadRssFeeds, saveRssFeed, deleteRssFeed, syncRss, toggleRssFeed,
                     dragOver, handleDrop, handleFileUpload, formatBytes, formatDate, stats,
                     initGraph,
-                    previewOpen, previewLoading, previewContent, previewDocName, previewRelated, previewAssociation, previewMode, candidateWorkbenchItem, previewDoc, closePreview, isEditingDoc, saveDocContent, saveCandidateReviewInline,
+                    previewOpen, previewLoading, previewContent, previewDocName, previewRelated, previewAssociation, previewMeta, previewMode, candidateWorkbenchItem, previewDoc, closePreview, isEditingDoc, saveDocContent, saveCandidateReviewInline,
                     translationModels, translationProvider, selectedTranslationModel, isRetranslating, retranslateDoc,
                     llmProviders, llmFlows, llmBackups, llmSecretSetup, llmMode, llmModeOptions, llmModeLabel, llmModeDescription, settingLlmMode,
                     fileImportFlow, fileImportProviderChain,

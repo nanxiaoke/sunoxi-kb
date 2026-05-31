@@ -11,6 +11,8 @@ Usage:
 
 import os
 import sys
+import csv
+import io
 import json
 import shutil
 import hashlib
@@ -32,7 +34,7 @@ KB_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KB_DIR / "scripts"))
 
 # ── Flask setup ──────────────────────────────────────────────────
-from flask import Flask, request, jsonify, send_from_directory, send_file, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, send_file, render_template_string, Response
 from flask_cors import CORS
 
 app = Flask(__name__, static_folder=None)
@@ -1625,6 +1627,74 @@ def _llm_audit_payload() -> Dict[str, Any]:
     }
 
 
+def _llm_audit_filters_from_request() -> Dict[str, Any]:
+    return {
+        "flow": (request.args.get("flow") or "").strip(),
+        "provider": (request.args.get("provider") or "").strip(),
+        "model": (request.args.get("model") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "missing": request.args.get("missing", "").lower() in {"1", "true", "yes"},
+        "fallback": request.args.get("fallback", "").lower() in {"1", "true", "yes"},
+        "retranslated": request.args.get("retranslated", "").lower() in {"1", "true", "yes"},
+    }
+
+
+def _apply_llm_audit_filters(payload: Dict[str, Any], filters: Dict[str, Any]) -> Dict[str, Any]:
+    def match(item: Dict[str, Any]) -> bool:
+        llm = item.get("llm") if isinstance(item.get("llm"), dict) else {}
+        retr = item.get("llm_retranslation") if isinstance(item.get("llm_retranslation"), dict) else {}
+        if filters.get("flow") and str(llm.get("flow") or "") != filters["flow"]:
+            return False
+        if filters.get("provider") and str(llm.get("provider") or "") != filters["provider"]:
+            return False
+        if filters.get("model") and str(llm.get("model") or "") != filters["model"]:
+            return False
+        if filters.get("status") and str(llm.get("status") or "") != filters["status"]:
+            return False
+        if filters.get("missing") and llm:
+            return False
+        if filters.get("fallback") and not (llm.get("fallback_from") or llm.get("fallback_to")):
+            return False
+        if filters.get("retranslated") and not retr:
+            return False
+        return True
+
+    filtered = [item for item in payload.get("items", []) if match(item)]
+    filtered_payload = dict(payload)
+    filtered_payload["items"] = filtered[:200]
+    filtered_payload["filtered_total"] = len(filtered)
+    filtered_payload["filters"] = {k: v for k, v in filters.items() if v}
+    return filtered_payload
+
+
+def _llm_audit_csv_response(payload: Dict[str, Any]) -> Response:
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["path", "title", "category", "modified", "flow", "provider", "model", "status", "fallback_from", "fallback_to", "retranslation_provider", "retranslation_model"])
+    for item in payload.get("items", []):
+        llm = item.get("llm") if isinstance(item.get("llm"), dict) else {}
+        retr = item.get("llm_retranslation") if isinstance(item.get("llm_retranslation"), dict) else {}
+        writer.writerow([
+            item.get("path", ""),
+            item.get("title", ""),
+            item.get("category", ""),
+            item.get("modified", ""),
+            llm.get("flow", ""),
+            llm.get("provider", ""),
+            llm.get("model", ""),
+            llm.get("status", ""),
+            llm.get("fallback_from", ""),
+            llm.get("fallback_to", ""),
+            retr.get("provider", ""),
+            retr.get("model", ""),
+        ])
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=llm-audit.csv"},
+    )
+
+
 @app.route("/api/llm/config", methods=["GET"])
 def get_llm_config():
     if not _feature_enabled("llm_settings"):
@@ -1713,7 +1783,10 @@ def llm_audit():
     if not _feature_enabled("llm_audit"):
         return _feature_disabled_response("llm_audit")
     try:
-        return jsonify(_llm_audit_payload())
+        payload = _apply_llm_audit_filters(_llm_audit_payload(), _llm_audit_filters_from_request())
+        if (request.args.get("format") or "").lower() == "csv":
+            return _llm_audit_csv_response(payload)
+        return jsonify(payload)
     except Exception as e:
         logger.error(f"Load LLM audit failed: {e}")
         return jsonify({"error": str(e)}), 500
@@ -3519,11 +3592,47 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         <div class="card-body p-4">
                             <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                                 <div class="font-semibold">{{ t('settings.audit') }}</div>
-                                <button class="btn btn-xs btn-outline" @click="loadLlmAudit" :disabled="loadingLlmAudit">
-                                    <span v-if="loadingLlmAudit" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.auditRefresh') }}
-                                </button>
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="btn btn-xs btn-outline" @click="loadLlmAudit" :disabled="loadingLlmAudit">
+                                        <span v-if="loadingLlmAudit" class="loading loading-spinner loading-xs mr-1"></span>{{ t('settings.auditRefresh') }}
+                                    </button>
+                                    <button class="btn btn-xs btn-outline" @click="exportLlmAudit('json')" :disabled="!llmAudit">导出 JSON</button>
+                                    <button class="btn btn-xs btn-outline" @click="exportLlmAudit('csv')" :disabled="!llmAudit">导出 CSV</button>
+                                </div>
                             </div>
                             <div v-if="llmAudit" class="space-y-4">
+                                <div class="rounded-xl border border-base-300 bg-base-100 p-3">
+                                    <div class="grid md:grid-cols-4 gap-2 text-xs">
+                                        <select v-model="llmAuditFilters.flow" class="select select-bordered select-xs">
+                                            <option value="">全部 Flow</option>
+                                            <option v-for="[name] in objectEntries(llmAudit.by_flow)" :key="name" :value="name">{{ name }}</option>
+                                        </select>
+                                        <select v-model="llmAuditFilters.provider" class="select select-bordered select-xs">
+                                            <option value="">全部 Provider</option>
+                                            <option v-for="[name] in objectEntries(llmAudit.by_provider)" :key="name" :value="name">{{ name }}</option>
+                                        </select>
+                                        <select v-model="llmAuditFilters.model" class="select select-bordered select-xs">
+                                            <option value="">全部 Model</option>
+                                            <option v-for="[name] in objectEntries(llmAudit.by_model)" :key="name" :value="name">{{ name }}</option>
+                                        </select>
+                                        <select v-model="llmAuditFilters.status" class="select select-bordered select-xs">
+                                            <option value="">全部 Status</option>
+                                            <option v-for="[name] in objectEntries(llmAudit.by_status)" :key="name" :value="name">{{ name }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+                                        <div class="flex flex-wrap gap-3 text-xs">
+                                            <label class="label cursor-pointer gap-1 p-0"><input v-model="llmAuditFilters.missing" type="checkbox" class="checkbox checkbox-xs">缺元数据</label>
+                                            <label class="label cursor-pointer gap-1 p-0"><input v-model="llmAuditFilters.fallback" type="checkbox" class="checkbox checkbox-xs">仅 fallback</label>
+                                            <label class="label cursor-pointer gap-1 p-0"><input v-model="llmAuditFilters.retranslated" type="checkbox" class="checkbox checkbox-xs">已重翻译</label>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button class="btn btn-xs btn-primary" @click="loadLlmAudit" :disabled="loadingLlmAudit">应用筛选</button>
+                                            <button class="btn btn-xs btn-ghost" @click="resetLlmAuditFilters">清空</button>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs opacity-60 mt-2">筛选结果 {{ llmAudit.filtered_total ?? (llmAudit.items || []).length }} / {{ llmAudit.total || 0 }}</div>
+                                </div>
                                 <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditCoverage') }}</div>
@@ -4262,6 +4371,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const llmModeOptions = ref([]);
                 const settingLlmMode = ref('');
                 const llmAudit = ref(null);
+                const llmAuditFilters = reactive({ flow: '', provider: '', model: '', status: '', missing: false, fallback: false, retranslated: false });
                 const loadingLlmAudit = ref(false);
                 const loadingLlmConfig = ref(false);
                 const savingLlmConfig = ref(false);
@@ -4618,7 +4728,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const loadLlmAudit = async () => {
                     loadingLlmAudit.value = true;
                     try {
-                        const res = await fetch('/api/llm/audit');
+                        const params = new URLSearchParams();
+                        Object.entries(llmAuditFilters).forEach(([key, value]) => {
+                            if(value) params.set(key, value === true ? 'true' : value);
+                        });
+                        const url = `/api/llm/audit${params.toString() ? `?${params}` : ''}`;
+                        const res = await fetch(url);
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                         llmAudit.value = data;
@@ -4627,6 +4742,24 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     } finally {
                         loadingLlmAudit.value = false;
                     }
+                };
+
+                const resetLlmAuditFilters = async () => {
+                    Object.assign(llmAuditFilters, { flow: '', provider: '', model: '', status: '', missing: false, fallback: false, retranslated: false });
+                    await loadLlmAudit();
+                };
+
+                const llmAuditExportUrl = (format) => {
+                    const params = new URLSearchParams();
+                    Object.entries(llmAuditFilters).forEach(([key, value]) => {
+                        if(value) params.set(key, value === true ? 'true' : value);
+                    });
+                    params.set('format', format);
+                    return `/api/llm/audit?${params.toString()}`;
+                };
+
+                const exportLlmAudit = (format) => {
+                    window.open(llmAuditExportUrl(format), '_blank');
                 };
 
                 const restoreLlmBackup = async (name) => {
@@ -5914,8 +6047,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     translationModels, translationProvider, selectedTranslationModel, isRetranslating, retranslateDoc,
                     llmProviders, llmFlows, llmBackups, llmSecretSetup, llmMode, llmModeOptions, llmModeLabel, llmModeDescription, settingLlmMode,
                     fileImportFlow, fileImportProviderChain,
-                    llmAudit, loadingLlmAudit, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
-                    loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, restoreLlmBackup, testLlmProvider, objectEntries,
+                    llmAudit, llmAuditFilters, loadingLlmAudit, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
+                    loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, resetLlmAuditFilters, exportLlmAudit, restoreLlmBackup, testLlmProvider, objectEntries,
                     addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel,
                     availableProvidersForFlow, addProviderToFlow, removeFlowProvider, moveFlowProvider,
                     showUrlInput, fetchUrlInput, isFetchingUrl, fetchUrlError, fetchUrlSuccess, fetchUrl, failedImports, retryFailedImport

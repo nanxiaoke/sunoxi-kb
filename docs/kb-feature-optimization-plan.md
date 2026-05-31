@@ -1,6 +1,6 @@
 # Knowledge Base Feature Optimization Plan
 
-Status: Task F first pass complete as of 2026-05-31.
+Status: Task G in progress as of 2026-05-31.
 
 ## Decision
 
@@ -312,3 +312,27 @@ Task F: Post-import reprocessing.
 - 2026-05-30: `POST /api/documents/<path>/translate` now supports `dry_run: true`, returning generated retranslation previews and LLM metadata without writing. WebUI retranslation now previews first and asks for confirmation before applying.
 - 2026-05-30: Applied rule-based quality repairs now write `quality_repair` frontmatter metadata with method, repaired issue list, status, and timestamp for later audit.
 - 2026-05-31: Batch quality repair now also supports `dry_run: true`. The WebUI one-click quality repair first previews the planned document list and issue labels, then asks for confirmation before applying changes.
+
+## Current Planned Task G
+
+Task G: Audit and observability enhancements.
+
+### Scope
+
+- Add filters for LLM audit by provider, model, flow, status, fallback, and retranslation state.
+- Add JSON/CSV export for audit data.
+- Keep audit useful for deployment debugging without exposing secrets.
+
+### Task G Subtasks
+
+- [x] Add backend LLM audit filters.
+- [x] Add CSV/JSON export for filtered LLM audit data.
+- [x] Add WebUI controls for LLM audit filtering and export.
+- [ ] Surface rule-based `quality_repair` metadata in audit.
+- [ ] Add per-document generation chain view.
+
+### Implementation Progress
+
+- 2026-05-31: Task G started after Task F first pass. `/api/llm/audit` now supports filters for flow, provider, model, status, missing metadata, fallback-only, and retranslated-only.
+- 2026-05-31: LLM audit supports filtered export with `format=csv` and JSON responses using the same filters.
+- 2026-05-31: System Settings LLM audit panel now includes filter controls plus JSON/CSV export buttons.

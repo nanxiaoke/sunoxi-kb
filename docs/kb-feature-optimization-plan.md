@@ -328,11 +328,12 @@ Task G: Audit and observability enhancements.
 - [x] Add backend LLM audit filters.
 - [x] Add CSV/JSON export for filtered LLM audit data.
 - [x] Add WebUI controls for LLM audit filtering and export.
-- [ ] Surface rule-based `quality_repair` metadata in audit.
-- [ ] Add per-document generation chain view.
+- [x] Surface rule-based `quality_repair` metadata in audit.
+- [x] Add per-document generation chain view.
 
 ### Implementation Progress
 
 - 2026-05-31: Task G started after Task F first pass. `/api/llm/audit` now supports filters for flow, provider, model, status, missing metadata, fallback-only, and retranslated-only.
 - 2026-05-31: LLM audit supports filtered export with `format=csv` and JSON responses using the same filters.
 - 2026-05-31: System Settings LLM audit panel now includes filter controls plus JSON/CSV export buttons.
+- 2026-05-31: LLM audit items now include `quality_repair` metadata plus a compact `generation_chain` covering import LLM metadata, retranslation, rule-based quality repair, and legacy translation. The audit table and CSV export expose these fields.

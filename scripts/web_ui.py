@@ -1567,6 +1567,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
     fallback_count = 0
     retranslated_count = 0
     translation_legacy_count = 0
+    quality_repair_count = 0
 
     for path in sorted(wiki_dir.rglob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
         rel = path.relative_to(wiki_dir)
@@ -1577,6 +1578,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
         llm = meta.get("llm") if isinstance(meta.get("llm"), dict) else {}
         retranslation = meta.get("llm_retranslation") if isinstance(meta.get("llm_retranslation"), dict) else {}
         translation_legacy = meta.get("llm_translation_legacy") if isinstance(meta.get("llm_translation_legacy"), dict) else {}
+        quality_repair = meta.get("quality_repair") if isinstance(meta.get("quality_repair"), dict) else {}
         if not llm:
             missing += 1
         else:
@@ -1592,11 +1594,22 @@ def _llm_audit_payload() -> Dict[str, Any]:
                 fallback_count += 1
         if retranslation:
             retranslated_count += 1
+        if quality_repair:
+            quality_repair_count += 1
         if translation_legacy:
             translation_legacy_count += 1
             by_translation_provider[str(translation_legacy.get("provider") or "unknown")] += 1
             by_translation_model[str(translation_legacy.get("model") or "unknown")] += 1
         st = path.stat()
+        generation_chain = []
+        if llm:
+            generation_chain.append({"type": "import", "flow": llm.get("flow"), "provider": llm.get("provider"), "model": llm.get("model"), "status": llm.get("status")})
+        if retranslation:
+            generation_chain.append({"type": "retranslation", "flow": retranslation.get("flow"), "provider": retranslation.get("provider"), "model": retranslation.get("model"), "status": retranslation.get("status")})
+        if quality_repair:
+            generation_chain.append({"type": "quality_repair", "method": quality_repair.get("method"), "status": quality_repair.get("status"), "issues": quality_repair.get("issues", [])})
+        if translation_legacy:
+            generation_chain.append({"type": "legacy_translation", "provider": translation_legacy.get("provider"), "model": translation_legacy.get("model")})
         items.append({
             "path": str(rel),
             "title": str(meta.get("title") or rel.stem),
@@ -1605,6 +1618,8 @@ def _llm_audit_payload() -> Dict[str, Any]:
             "llm": llm,
             "llm_retranslation": retranslation,
             "llm_translation_legacy": translation_legacy,
+            "quality_repair": quality_repair,
+            "generation_chain": generation_chain,
         })
 
     total = len(items)
@@ -1616,6 +1631,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
         "fallback_count": fallback_count,
         "retranslated_count": retranslated_count,
         "translation_legacy_count": translation_legacy_count,
+        "quality_repair_count": quality_repair_count,
         "by_flow": dict(by_flow.most_common()),
         "by_provider": dict(by_provider.most_common()),
         "by_model": dict(by_model.most_common()),
@@ -1670,10 +1686,11 @@ def _apply_llm_audit_filters(payload: Dict[str, Any], filters: Dict[str, Any]) -
 def _llm_audit_csv_response(payload: Dict[str, Any]) -> Response:
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["path", "title", "category", "modified", "flow", "provider", "model", "status", "fallback_from", "fallback_to", "retranslation_provider", "retranslation_model"])
+    writer.writerow(["path", "title", "category", "modified", "flow", "provider", "model", "status", "fallback_from", "fallback_to", "retranslation_provider", "retranslation_model", "quality_repair_method", "quality_repair_issues", "generation_chain"])
     for item in payload.get("items", []):
         llm = item.get("llm") if isinstance(item.get("llm"), dict) else {}
         retr = item.get("llm_retranslation") if isinstance(item.get("llm_retranslation"), dict) else {}
+        repair = item.get("quality_repair") if isinstance(item.get("quality_repair"), dict) else {}
         writer.writerow([
             item.get("path", ""),
             item.get("title", ""),
@@ -1687,6 +1704,9 @@ def _llm_audit_csv_response(payload: Dict[str, Any]) -> Response:
             llm.get("fallback_to", ""),
             retr.get("provider", ""),
             retr.get("model", ""),
+            repair.get("method", ""),
+            "|".join(str(x) for x in (repair.get("issues") or [])),
+            "|".join(str(x.get("type", "")) for x in (item.get("generation_chain") or [])),
         ])
     return Response(
         out.getvalue(),
@@ -3633,7 +3653,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     </div>
                                     <div class="text-xs opacity-60 mt-2">筛选结果 {{ llmAudit.filtered_total ?? (llmAudit.items || []).length }} / {{ llmAudit.total || 0 }}</div>
                                 </div>
-                                <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+                                <div class="grid grid-cols-2 md:grid-cols-7 gap-2">
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditCoverage') }}</div>
                                         <div class="text-xl font-bold">{{ Math.round((llmAudit.coverage || 0) * 100) }}%</div>
@@ -3657,6 +3677,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditLegacyTranslation') }}</div>
                                         <div class="text-xl font-bold">{{ llmAudit.translation_legacy_count || 0 }}</div>
+                                    </div>
+                                    <div class="rounded-xl border border-base-300 bg-base-100 p-3">
+                                        <div class="text-xs opacity-60">Quality Repair</div>
+                                        <div class="text-xl font-bold">{{ llmAudit.quality_repair_count || 0 }}</div>
                                     </div>
                                 </div>
                                 <div class="grid md:grid-cols-3 gap-3 text-xs">
@@ -3697,7 +3721,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div class="font-semibold mb-2">{{ t('settings.recentLlmDocs') }}</div>
                                     <div class="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
                                         <table class="table table-xs">
-                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Retrans</th></tr></thead>
+                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Retrans</th><th>Repair</th><th>Chain</th></tr></thead>
                                             <tbody>
                                                 <tr v-for="item in (llmAudit.items || []).slice(0,10)" :key="item.path" class="hover cursor-pointer" @click="previewDoc(item.path)">
                                                     <td class="max-w-xs truncate">{{ item.title || item.path }}</td>
@@ -3706,6 +3730,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                     <td class="font-mono">{{ item.llm?.model || '-' }}</td>
                                                     <td>{{ item.llm?.status || '-' }}</td>
                                                     <td>{{ item.llm_retranslation?.provider || '-' }}</td>
+                                                    <td>{{ item.quality_repair?.method || '-' }}</td>
+                                                    <td>
+                                                        <span v-for="step in (item.generation_chain || [])" :key="item.path + step.type" class="badge badge-xs badge-outline mr-1">{{ step.type }}</span>
+                                                    </td>
                                                 </tr>
                                             </tbody>
                                         </table>

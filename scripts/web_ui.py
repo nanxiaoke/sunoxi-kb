@@ -1814,7 +1814,9 @@ def retranslate_document(relpath: str):
 
 @app.route("/api/quality/repair", methods=["POST"])
 def repair_all_quality():
-    limit = int((request.get_json(silent=True) or {}).get("limit") or 20)
+    data = request.get_json(silent=True) or {}
+    limit = int(data.get("limit") or 20)
+    dry_run = bool(data.get("dry_run"))
     wiki_dir = KB_DIR / "wiki"
     results = []
     for f in wiki_dir.rglob("*.md"):
@@ -1833,7 +1835,8 @@ def repair_all_quality():
             new_text = _replace_section(new_text, '🔑 关键点', sections['keypoints'])
         if 'entities_placeholder' in q['issues']:
             new_text = _replace_section(new_text, '🏷️ 实体与概念', sections['entities'])
-        if new_text != text:
+        changed = new_text != text
+        if changed and not dry_run:
             new_text = _upsert_frontmatter_mapping(new_text, "quality_repair", {
                 "method": "rule_based",
                 "issues": q.get("issues", []),
@@ -1841,12 +1844,18 @@ def repair_all_quality():
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             })
             f.write_text(new_text, encoding="utf-8")
-        results.append({"path": str(rel), "before": q, "after": _quality_status_for_content(new_text)})
+        results.append({
+            "path": str(rel),
+            "changed": changed,
+            "before": q,
+            "after": _quality_status_for_content(new_text),
+            "sections": sections if dry_run else None,
+        })
         if len(results) >= limit:
             break
-    if results:
+    if results and not dry_run:
         _rebuild_index()
-    return jsonify({"repaired": len(results), "results": results})
+    return jsonify({"repaired": len(results), "planned": len(results), "dry_run": dry_run, "results": results})
 
 
 # ── Stats ────────────────────────────────────────────────────────
@@ -4881,10 +4890,27 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 };
 
                 const repairAllQuality = async () => {
-                    if(!confirm(`确认修复 ${qualityBadCount.value} 个质量待修复文档？`)) return;
+                    if(!qualityBadCount.value) return;
                     repairingQuality.value = true;
                     try {
-                        const res = await fetch('/api/quality/repair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 50 }) });
+                        const previewRes = await fetch('/api/quality/repair', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ limit: 50, dry_run: true })
+                        });
+                        const preview = await previewRes.json();
+                        if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
+                        const sample = (preview.results || []).slice(0, 5).map(x => `${x.path}: ${issueText(x.before?.issues || [])}`).join('\n');
+                        if(!preview.planned) {
+                            showToast('没有需要修复的文档', 'info');
+                            return;
+                        }
+                        if(!confirm(`确认批量应用质量修复？\n计划修复：${preview.planned} 篇\n\n${sample}`)) return;
+                        const res = await fetch('/api/quality/repair', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ limit: 50, dry_run: false })
+                        });
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                         showToast(`已修复 ${data.repaired || 0} 个文档`, 'success');

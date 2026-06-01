@@ -1015,3 +1015,15 @@ python3 scripts/processor.py --process-all
 - `python3 -m py_compile scripts/qa.py scripts/web_ui.py scripts/smoke_search_qa.py` 通过。
 - `python3 scripts/smoke_search_qa.py` 通过。
 - Flask test_client 验证 `/api/search?qa=true&answer_mode=extractive` 对英文问题返回 `response_language=en`，对中文问题返回 `response_language=zh`。
+
+## 2026-06-01 - QA：避免模型生成错误被缓存固化
+
+### 已完成
+- 确认 QA 缓存文件为 `qa_cache.json`，当前缓存备份到 `backups/qa_cache.json.bak-20260601T190329Z` 后清空。
+- 修复 WebUI QA 调用：`answer_mode=llm` 的模型生成答案不再读写缓存；只有 `answer_mode=extractive` 的极速答案继续使用缓存。
+- 这样模型生成偶发错误、分词误召回导致的错误回答不会因为缓存而在后续同问法中持续复现。
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py scripts/qa.py scripts/smoke_search_qa.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。

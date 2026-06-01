@@ -972,8 +972,8 @@ def search():
     if is_qa:
         try:
             qa_sys = _get_qa_system()
-            # LLM模式通常较慢，绕过旧缓存可以让“模型生成”按钮语义明确。
-            result = qa_sys.answer_question(q, max_docs=4, use_cache=True, answer_mode=qa_mode)
+            # Model-generated answers can be wrong or stale; keep caching only for deterministic extractive answers.
+            result = qa_sys.answer_question(q, max_docs=4, use_cache=(qa_mode == "extractive"), answer_mode=qa_mode)
             # 兼容前端预期格式
             return jsonify({
                 "query": q,

@@ -33,6 +33,12 @@ def main() -> int:
         ]:
             _assert(token in html, f"missing WebUI token: {token}")
 
+        web_ui_source = (ROOT / "scripts" / "web_ui.py").read_text(encoding="utf-8")
+        _assert(
+            'use_cache=(qa_mode == "extractive")' in web_ui_source,
+            "LLM QA answers should bypass persistent cache",
+        )
+
         docs_resp = client.get("/api/documents")
         _assert(docs_resp.status_code == 200, f"documents returned {docs_resp.status_code}")
         docs = docs_resp.get_json().get("documents", [])

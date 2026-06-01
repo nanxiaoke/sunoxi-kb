@@ -352,10 +352,17 @@ Task H: WebUI usability polish.
 
 - [x] Add document quality and LLM metadata to the document preview API.
 - [x] Show quality, import LLM, retranslation, and quality repair badges in the document preview drawer.
-- [ ] Improve search result and document list actions.
-- [ ] Review mobile drawer layout for dense metadata.
+- [x] Improve search result and document list actions.
+- [x] Add audit table to document preview reverse navigation.
+- [x] Add smoke regression coverage for audit/export, preview metadata, and quality repair dry-run.
+- [x] Review mobile drawer layout for dense metadata.
 
 ### Implementation Progress
 
 - 2026-05-31: Document preview API now returns a `meta` object with title, category, quality status, import LLM metadata, retranslation metadata, and rule-based quality repair metadata.
 - 2026-05-31: Document preview drawer now shows compact badges for quality state, import LLM chain, retranslation, and quality repair before the markdown body/related-doc recommendations.
+- 2026-06-01: Search/QA source cards now expose preview, document-list focus, and audit actions. Document list rows now expose preview, quality repair, and audit actions without relying only on row clicks.
+- 2026-06-01: LLM audit rows now have an explicit open action that passes the audit item into the document preview drawer. The drawer shows a compact generation-chain audit panel when opened from audit context.
+- 2026-06-01: Added `scripts/smoke_webui_audit.py` to cover WebUI action tokens, document preview metadata, LLM audit filters/export, generation-chain presence, and quality repair dry-run.
+- 2026-06-01: Mobile layout hardening pass: source cards use full width on small screens, document rows wrap before narrow overflow, row actions align to the trailing edge, and the preview drawer header stacks title/actions on small screens.
+- 2026-06-01: QA answer language now follows the question language. Extractive answers use Chinese or English section/source labels, LLM QA prompts are language-aware, cache keys include response language, `/api/search?qa=true` returns `response_language`, and search/QA smoke coverage includes an English bilingual-answer case.

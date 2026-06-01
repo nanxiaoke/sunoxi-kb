@@ -40,6 +40,37 @@ except ImportError:
 
 class KnowledgeBaseQA:
     """知识库问答系统"""
+
+    ANSWER_LABELS = {
+        "zh": {
+            "not_found": "抱歉，知识库中没有找到相关文档来回答这个问题。",
+            "model_unavailable": "抱歉，AI模型服务暂时不可用。",
+            "model_error": "抱歉，生成答案时出现错误",
+            "missing": "文档中未提及",
+            "conclusion": "结论",
+            "points": "要点",
+            "summary": "总结",
+            "doc_ref": "文档",
+            "source_heading": "📚 参考文档:",
+            "high_relevance": " 🔥高相关",
+            "mid_relevance": " 中相关",
+            "fallback_doc": "相关文档",
+        },
+        "en": {
+            "not_found": "Sorry, I could not find relevant documents in the knowledge base to answer this question.",
+            "model_unavailable": "Sorry, the AI model service is temporarily unavailable.",
+            "model_error": "Sorry, an error occurred while generating the answer",
+            "missing": "The documents do not mention this.",
+            "conclusion": "Conclusion",
+            "points": "Key Points",
+            "summary": "Summary",
+            "doc_ref": "Doc",
+            "source_heading": "📚 Sources:",
+            "high_relevance": " High relevance",
+            "mid_relevance": " Medium relevance",
+            "fallback_doc": "related document",
+        },
+    }
     
     def __init__(self, base_dir: Path):
         from pathlib import Path
@@ -75,6 +106,20 @@ class KnowledgeBaseQA:
         except Exception as e:
             logger.warning(f"LLMService初始化失败: {e}")
             self.llm = None
+
+    def _detect_response_language(self, question: str) -> str:
+        """Pick answer language from the user's question."""
+        question = question or ""
+        zh_chars = len(re.findall(r'[\u4e00-\u9fff]', question))
+        latin_words = len(re.findall(r'[A-Za-z]{2,}', question))
+        if zh_chars:
+            return "zh"
+        if latin_words:
+            return "en"
+        return "zh"
+
+    def _labels(self, response_language: str) -> Dict[str, str]:
+        return self.ANSWER_LABELS.get(response_language, self.ANSWER_LABELS["zh"])
     
     def _clean_query(self, question: str) -> str:
         """清理查询：移除疑问词和标点，提取核心内容"""
@@ -205,6 +250,9 @@ class KnowledgeBaseQA:
             "原文标题:", "来源:", "发布时间:", "此条目由AI自动生成"
         ]
         return any(p in text for p in noise_patterns)
+
+    def _has_cjk(self, text: str) -> bool:
+        return bool(re.search(r'[\u4e00-\u9fff]', text or ""))
 
     def _qa_content(self, content: str) -> str:
         """优先使用真实原文内容，跳过自动生成的相关文档/元数据区域。"""
@@ -355,10 +403,11 @@ class KnowledgeBaseQA:
         
         return "\n\n".join(context_parts)
     
-    def generate_extractive_answer(self, question: str, documents: List[Dict], query_tokens: List[str]) -> Tuple[str, List[Dict]]:
+    def generate_extractive_answer(self, question: str, documents: List[Dict], query_tokens: List[str], response_language: str = "zh") -> Tuple[str, List[Dict]]:
         """极速可追溯答案：不调用LLM，基于摘要/关键点/相关片段生成。适合Web交互默认路径。"""
+        labels = self._labels(response_language)
         if not documents:
-            return "抱歉，知识库中没有找到相关文档来回答这个问题。", []
+            return labels["not_found"], []
 
         citations = [
             {
@@ -380,11 +429,19 @@ class KnowledgeBaseQA:
             content = self._qa_content(doc_info.get("content") or "")
 
             if i == 1:
-                if summary and not self._is_placeholder(summary) and not self._is_noisy_text(summary):
+                if (
+                    summary
+                    and not self._is_placeholder(summary)
+                    and not self._is_noisy_text(summary)
+                    and not (response_language == "en" and self._has_cjk(summary))
+                ):
                     first_summary = re.split(r'[。！？.!?]\s*', summary)[0].strip()
                     conclusion_bits.append(first_summary or title)
                 else:
-                    conclusion_bits.append(f"《{title}》是知识库中与问题最相关的文档")
+                    if response_language == "en":
+                        conclusion_bits.append(f'"{title}" is the most relevant document found in the knowledge base for this question')
+                    else:
+                        conclusion_bits.append(f"《{title}》是知识库中与问题最相关的文档")
 
             snippet = self._extract_relevant_content(content, query_tokens, max_chars=900) if content else ""
             # 选择含查询词的短句补充，避免整段堆砌
@@ -392,6 +449,8 @@ class KnowledgeBaseQA:
             anchor_seen = False
             for sent in sentences[:30]:
                 sent = self._clean_answer_text(sent)
+                if response_language == "en" and self._has_cjk(sent):
+                    continue
                 low = sent.lower()
                 if any(bad in sent for bad in ["公众号", "候选来源", "原文链接", "抓取时间", "建议分类", "Mz", "gh_"]):
                     continue
@@ -402,7 +461,7 @@ class KnowledgeBaseQA:
                 if matched and len(sent) <= max(len(t) for t in query_tokens if len(t) >= 2) + 2:
                     continue
                 if len(sent) >= min_len and (matched or (i == 1 and anchor_seen)):
-                    points.append(f"- {sent[:180]} [文档{i}]")
+                    points.append(f"- {sent[:180]} [{labels['doc_ref']}{i}]")
                 if len(points) >= 12:
                     break
             if len(points) >= 12:
@@ -411,8 +470,10 @@ class KnowledgeBaseQA:
             if not self._is_placeholder(" ".join(map(str, keypoints))):
                 for kp in keypoints[:4]:
                     kp = self._clean_answer_text(str(kp).strip().lstrip('-•0123456789.、 '))
+                    if response_language == "en" and self._has_cjk(kp):
+                        continue
                     if kp and len(kp) >= 6 and not self._is_noisy_text(kp):
-                        points.append(f"- {kp[:180]} [文档{i}]")
+                        points.append(f"- {kp[:180]} [{labels['doc_ref']}{i}]")
                 if len(points) >= 12:
                     break
 
@@ -430,19 +491,33 @@ class KnowledgeBaseQA:
         conclusion = conclusion_bits[0] if conclusion_bits else documents[0].get("title", "相关文档")
         if len(conclusion) > 180:
             conclusion = conclusion[:180] + "…"
-        answer = f"**结论**\n{conclusion} [文档1]\n\n**要点**\n"
-        answer += "\n".join(deduped or [f"- 可参考《{documents[0].get('title', '相关文档')}》的摘要和正文片段。 [文档1]"])
-        answer += f"\n\n**总结**\n以上回答基于检索到的 {len(documents)} 篇相关文档；如需更完整解释，可以打开参考来源继续阅读。"
-        return self._format_answer(answer, citations), citations
+        answer = f"**{labels['conclusion']}**\n{conclusion} [{labels['doc_ref']}1]\n\n**{labels['points']}**\n"
+        if deduped:
+            answer += "\n".join(deduped)
+        elif response_language == "en":
+            answer += f"- See the summary and relevant body snippets from \"{documents[0].get('title', labels['fallback_doc'])}\". [{labels['doc_ref']}1]"
+        else:
+            answer += f"- 可参考《{documents[0].get('title', labels['fallback_doc'])}》的摘要和正文片段。 [{labels['doc_ref']}1]"
+        if response_language == "en":
+            answer += f"\n\n**{labels['summary']}**\nThis answer is based on {len(documents)} relevant document(s). Open the sources for the full context."
+        else:
+            answer += f"\n\n**{labels['summary']}**\n以上回答基于检索到的 {len(documents)} 篇相关文档；如需更完整解释，可以打开参考来源继续阅读。"
+        return self._format_answer(answer, citations, response_language=response_language), citations
 
-    def generate_answer(self, question: str, context: str, documents: List[Dict]) -> Tuple[str, List[Dict]]:
+    def generate_answer(self, question: str, context: str, documents: List[Dict], response_language: str = "zh") -> Tuple[str, List[Dict]]:
         """生成答案（使用 LLMService 的 qa FlowPolicy）"""
+        labels = self._labels(response_language)
         if not self.llm:
-            return "抱歉，AI模型服务暂时不可用。", documents
+            return labels["model_unavailable"], documents
         
         try:
             # 短提示 + 强约束，减少 Gemma 思考和冗长输出，提高 Web 交互速度。
-            system_prompt = """Do not think. 你是知识库QA助手。只基于给定文档中文回答，不编造；必须引用[文档N]；信息不足就说“文档中未提及”。答案分为：结论、要点、总结。控制在220-360字。"""
+            if response_language == "en":
+                system_prompt = """Do not think. You are a knowledge-base QA assistant. Answer in English only, based only on the provided documents. Do not fabricate. Cite sources as [Doc N]. If the information is insufficient, say "The documents do not mention this." Use sections: Conclusion, Key Points, Summary. Keep the answer concise."""
+                final_instruction = "Answer directly in English and cite the relevant documents as [Doc N]."
+            else:
+                system_prompt = """Do not think. 你是知识库QA助手。只基于给定文档中文回答，不编造；必须引用[文档N]；信息不足就说“文档中未提及”。答案分为：结论、要点、总结。控制在220-360字。"""
+                final_instruction = "请直接给出中文答案，引用相关文档。"
             
             # 准备用户消息
             user_message = f"""问题：{question}
@@ -450,7 +525,7 @@ class KnowledgeBaseQA:
 文档：
 {context}
 
-请直接给出中文答案，引用相关文档。"""
+{final_instruction}"""
             
             logger.info(f"生成答案（上下文长度: {len(context)}字符）...")
             messages = [
@@ -465,7 +540,7 @@ class KnowledgeBaseQA:
             self.last_llm_result = result.to_dict()
             if result.status != "ok":
                 logger.error(f"QA LLM调用失败: {result.error}")
-                return f"抱歉，生成答案时出现错误: {result.error}", []
+                return f"{labels['model_error']}: {result.error}", []
             logger.info(
                 "QA LLM provider: %s / %s%s",
                 result.provider,
@@ -498,22 +573,22 @@ class KnowledgeBaseQA:
                     ]
                 
                 # 格式化答案
-                formatted_answer = self._format_answer(answer, citations)
+                formatted_answer = self._format_answer(answer, citations, response_language=response_language)
                 
                 return formatted_answer, citations
             else:
-                return "抱歉，生成答案时出现错误。", []
+                return f"{labels['model_error']}.", []
                 
         except Exception as e:
             logger.error(f"生成答案失败: {e}")
-            return f"抱歉，生成答案时出现错误: {str(e)}", []
+            return f"{labels['model_error']}: {str(e)}", []
     
     def _extract_citations(self, answer: str, documents: List[Dict]) -> List[Dict]:
         """从答案中提取引用信息"""
         citations = []
         
-        # 查找文档引用模式 [文档1]、[文档2]等
-        citation_pattern = r'\[文档(\d+)\]'
+        # 查找文档引用模式 [文档1]、[Doc 1] 等
+        citation_pattern = r'\[(?:文档|Doc)\s*(\d+)\]'
         matches = re.findall(citation_pattern, answer)
         
         for match in matches:
@@ -541,17 +616,18 @@ class KnowledgeBaseQA:
         
         return unique_citations
     
-    def _format_answer(self, answer: str, citations: List[Dict]) -> str:
+    def _format_answer(self, answer: str, citations: List[Dict], response_language: str = "zh") -> str:
         """格式化答案，添加引用信息（优化版：更清晰简洁）"""
         if not citations:
             return answer
+        labels = self._labels(response_language)
         
         # 提取纯答案部分（去掉可能的思考过程）
         clean_answer = answer
         
         # 添加参考文档
         formatted = f"{clean_answer}\n\n"
-        formatted += "📚 参考文档:\n"
+        formatted += f"{labels['source_heading']}\n"
         
         for citation in citations:
             title = citation.get("title", "未知标题")
@@ -561,22 +637,22 @@ class KnowledgeBaseQA:
             # 分数高的文档排在前面，显示相关度
             relevance = ""
             if score >= 3:
-                relevance = " 🔥高相关"
+                relevance = labels["high_relevance"]
             elif score >= 1.5:
-                relevance = " 中相关"
+                relevance = labels["mid_relevance"]
             
             formatted += f"  {doc_index}. {title}{relevance}\n"
         
         return formatted
     
-    def _cache_key(self, question: str, max_docs: int, answer_mode: str = "auto") -> str:
+    def _cache_key(self, question: str, max_docs: int, answer_mode: str = "auto", response_language: str = "zh") -> str:
         """缓存键包含索引mtime，避免新增/重建文档后命中过期答案。"""
         index_file = self.base_dir / "search_index.json"
         try:
             index_sig = str(int(index_file.stat().st_mtime))
         except Exception:
             index_sig = "noindex"
-        return f"v4:{index_sig}:{max_docs}:{answer_mode}:{question.strip().lower()}"
+        return f"v5:{index_sig}:{max_docs}:{answer_mode}:{response_language}:{question.strip().lower()}"
 
     def answer_question(self, question: str, max_docs: int = 4, use_cache: bool = True, answer_mode: str = "auto") -> Dict[str, Any]:
         """回答问题（主接口，含缓存）。
@@ -588,10 +664,12 @@ class KnowledgeBaseQA:
         if answer_mode not in {"auto", "extractive", "llm"}:
             answer_mode = "auto"
         effective_mode = "llm" if answer_mode == "llm" else "extractive"
-        logger.info(f"回答问题: {question} (mode={effective_mode})")
+        response_language = self._detect_response_language(question)
+        labels = self._labels(response_language)
+        logger.info(f"回答问题: {question} (mode={effective_mode}, lang={response_language})")
         
         # 缓存命中检查
-        cache_key = self._cache_key(question, max_docs, effective_mode)
+        cache_key = self._cache_key(question, max_docs, effective_mode, response_language)
         if use_cache and self.cache:
             cached = self.cache.get(cache_key)
             if cached:
@@ -629,20 +707,21 @@ class KnowledgeBaseQA:
                 self.metrics.record_qa(elapsed, False, len(question))
             return {
                 "question": question,
-                "answer": "抱歉，知识库中没有找到相关文档来回答这个问题。",
+                "answer": labels["not_found"],
                 "documents": [],
                 "context": "",
                 "latency": round(elapsed, 2),
                 "timestamp": datetime.now().isoformat(),
                 "cache_hit": False,
-                "answer_mode": "none"
+                "answer_mode": "none",
+                "response_language": response_language,
             }
         
         # 3. 生成答案。请求级模式：extractive 极速答案 / llm 模型生成。
         if effective_mode == "llm":
-            answer, citations = self.generate_answer(question, context, documents)
+            answer, citations = self.generate_answer(question, context, documents, response_language=response_language)
         else:
-            answer, citations = self.generate_extractive_answer(question, documents, query_tokens)
+            answer, citations = self.generate_extractive_answer(question, documents, query_tokens, response_language=response_language)
         
         # 4. 构建结果
         elapsed = __import__('time').time() - start_time
@@ -669,7 +748,8 @@ class KnowledgeBaseQA:
             "latency": round(elapsed, 2),
             "timestamp": datetime.now().isoformat(),
             "cache_hit": False,
-            "answer_mode": effective_mode
+            "answer_mode": effective_mode,
+            "response_language": response_language,
         }
         if effective_mode == "llm" and self.last_llm_result:
             result["llm"] = {

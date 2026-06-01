@@ -897,3 +897,121 @@ python3 scripts/processor.py --process-all
 
 ### 当前状态
 检索/QA 体验优化闭环完成：候选入库后的内容可以被快速、准确检索，并在 WebUI 中以可追溯答案返回。默认路径优先速度和可用性；需要更自然的生成式回答时可通过环境变量启用 LLM。
+
+## 2026-05-31 - Task F/G/H：重处理安全、LLM 审计与预览可用性
+
+### 已完成
+- Task F 批量重处理安全收尾：`/api/quality/repair` 支持 `dry_run: true`，WebUI “一键修复质量”会先预览待修复文档、问题类型和样例，再确认写入。
+- 质量修复写入可审计元数据：应用规则修复后在 frontmatter 写入 `quality_repair`，记录方法、修复 issue、状态和时间，供后续审计追踪。
+- Task G 审计与可观测性启动并完成首轮：`/api/llm/audit` 支持按 flow、provider、model、status、缺失元数据、fallback-only、retranslated-only 过滤。
+- LLM 审计导出增强：JSON 响应返回 `filtered_total` 与当前 filters，`format=csv` 使用相同筛选条件导出 CSV。
+- System Settings 的 LLM 审计面板新增筛选控件、JSON/CSV 导出按钮，并展示质量修复数量。
+- 每篇文档新增 compact `generation_chain`：覆盖导入 LLM、重翻译、规则质量修复、旧版 translation 元数据；审计表和 CSV 均可查看。
+- Task H WebUI 可用性启动：文档详情 API 返回 `meta`，包含 title/category/quality/llm/llm_retranslation/quality_repair。
+- 文档预览抽屉新增质量状态、导入 LLM、重翻译、质量修复 badge，减少在文档列表、质量页和审计页之间来回切换。
+
+### 提交记录
+- `65a702d` Record quality repair metadata
+- `6c51ba0` Preview batch quality repair before applying
+- `c1843ae` Add LLM audit filters and export
+- `116c73a` Show generation chain in LLM audit
+- `64025af` Show document metadata in preview
+
+### 验证
+- `python3 scripts/kb_cli.py stats`：157 篇文档、11 个分类、1681 个实体、6734 个索引词。
+- `python3 -m py_compile scripts/web_ui.py` 通过。
+- Flask test_client 验证：
+  - `/api/llm/audit` 返回 200 JSON。
+  - `/api/llm/audit?format=csv` 返回 200 CSV。
+  - `/api/documents/<path>` 返回 200，响应包含 `meta` 字段。
+- Git 状态干净，HEAD 与 `origin/main` 同步在 `64025af`。
+
+### 当前状态
+- Task F first pass 完成：单文档和批量质量修复、重翻译路径都进入“预览后确认”模式。
+- Task G first pass 完成：LLM 元数据、fallback、重翻译、质量修复与 generation chain 已可筛选和导出。
+- Task H 进行中：文档预览抽屉已显示关键元数据，剩余重点是列表/搜索结果操作和移动端密集信息布局。
+
+### 下一步候选任务
+- 继续 Task H：改进搜索结果和文档列表动作，让“打开预览、修复质量、重翻译、审计定位”更少跳转。
+- 完成 Task H 移动端检查：验证预览抽屉在窄屏下的 badge、按钮和正文不拥挤。
+- 增加审计到文档的反向跳转：从 LLM 审计表直接打开对应文档预览并定位元数据。
+- 扩展回归验证：补 smoke 脚本覆盖 audit filters/export、document preview meta、quality repair dry-run。
+
+## 2026-06-01 - Task H：搜索/列表/审计操作闭环
+
+### 已完成
+- 搜索/QA 引用卡新增三个直接动作：
+  - `预览`：直接打开文档预览抽屉。
+  - `列表定位`：切到文档管理，定位到文档所在目录并按文件名过滤，同时打开预览。
+  - `审计`：切到系统设置的 LLM 审计上下文并打开对应文档。
+- 文档列表行新增显式动作区：
+  - `预览`、`修复`、`审计`，减少只依赖整行点击或跨页面查找。
+  - 质量待修复文档仍保留 dry-run 后确认的安全修复流程。
+- LLM 审计表新增 `Action` 列和 `打开` 按钮，表格行点击也会进入同一打开流程。
+- 从审计表打开文档时，会把当前 audit item 传入预览抽屉；抽屉顶部显示 `LLM 审计链路`，列出 compact generation chain，并显示 fallback 信息。
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py` 通过。
+- 抽取 WebUI application inline JS 后执行 `node --check /tmp/webui-app.js` 通过。
+- Flask test_client 验证：
+  - `/` 返回 200，HTML 包含 `focusDocInList`、`openAuditDoc`、`openDocAudit`、`LLM 审计链路`、`列表定位`。
+  - `/api/llm/audit` 返回 200 JSON。
+  - `/api/documents/<path>` 返回 200 JSON。
+
+### 当前状态
+- Task H 的搜索结果动作、文档列表动作、审计到文档预览反向跳转已完成。
+- 剩余 Task H 重点：移动端抽屉密集信息布局检查，以及把这些 WebUI/API 路径沉淀成 smoke 回归脚本。
+
+## 2026-06-01 - Task H：WebUI 审计与预览 smoke 回归
+
+### 已完成
+- 新增 `scripts/smoke_webui_audit.py`，把 WebUI 审计/预览关键路径沉淀为可重复回归：
+  - 首页 HTML 包含搜索引用卡、文档列表、审计跳转相关前端入口。
+  - `/api/documents` 可返回文档列表，并选取真实文档做预览检查。
+  - `/api/documents/<path>` 返回 `meta`，且包含质量信息。
+  - `/api/llm/audit` 返回审计 items、`filtered_total`，审计 item 包含 `generation_chain`。
+  - `/api/llm/audit?missing=true` 正确回显 filters。
+  - `/api/llm/audit?format=csv` 返回 CSV，表头包含 `generation_chain`。
+  - `/api/quality/repair` 的 `dry_run: true` 返回 dry-run 标记和 planned 计数，不写入文档。
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过，输出 `PASS webui audit smoke`。
+
+### 当前状态
+- Task H 已具备核心 WebUI/API 回归脚本。
+- 剩余 Task H 重点收敛到移动端/窄屏预览抽屉布局检查。
+
+## 2026-06-01 - Task H：移动端/窄屏布局收尾
+
+### 已完成
+- 搜索/QA 引用卡在小屏改为整行宽度，避免多个引用卡和新增操作按钮挤在同一行。
+- 文档列表行改为 `flex-wrap sm:flex-nowrap`，窄屏时允许标题、元数据和操作区换行，减少横向溢出。
+- 文档列表操作区增加 `ml-auto`，让 `预览/修复/审计` 在可用空间内靠右对齐。
+- 文档预览抽屉 header 改为小屏纵向堆叠、桌面横向排列，避免长文件名与翻译/编辑/关闭按钮互相挤压。
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- 抽取 WebUI application inline JS 后执行 `node --check /tmp/webui-app.js` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- 当前环境未安装 Playwright/Chromium，未做截图级视觉回归；本轮完成的是响应式结构收敛和 API/JS smoke 验证。
+
+### 当前状态
+- Task H 首轮完成：搜索/列表动作、审计反向跳转、预览抽屉审计链路、smoke 回归、窄屏布局收尾均已落地。
+- 下一阶段建议进入真实数据质量处理批次，或继续补更完整的浏览器级视觉回归工具链。
+
+## 2026-06-01 - QA：回答语言跟随提问语言
+
+### 已完成
+- `scripts/qa.py` 新增响应语言检测：中文问题继续返回中文，英文问题返回英文结构和英文错误/来源提示。
+- 极速答案不再固定中文 `结论/要点/总结/参考文档`，英文问题改为 `Conclusion/Key Points/Summary/Sources` 和 `[Doc N]` 引用。
+- LLM 生成模式的 QA prompt 改为按响应语言动态约束：英文问题要求英文回答和 `[Doc N]` 引用，中文问题保持原行为。
+- QA 缓存 key 升级到 `v5` 并包含响应语言，避免旧中文答案缓存污染英文问题。
+- `/api/search?qa=true` 响应新增 `response_language`，前端和调用方可识别本次回答语言。
+- 英文极速答案会优先使用英文原文片段；命中纯中文来源时不直接搬运中文正文，改用英文来源指引。
+- `scripts/smoke_search_qa.py` 增加 synthetic 双语用例，覆盖英文提问、英文标签、英文来源标题和 `[Doc]` 引用；同时更新 `harness` 用例以兼容当前语料中新出现的 `LLM Harness` 第一命中。
+
+### 验证
+- `python3 -m py_compile scripts/qa.py scripts/web_ui.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_search_qa.py` 通过。
+- Flask test_client 验证 `/api/search?qa=true&answer_mode=extractive` 对英文问题返回 `response_language=en`，对中文问题返回 `response_language=zh`。

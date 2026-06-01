@@ -40,7 +40,7 @@ class SmokeCase:
 CASES = [
     SmokeCase(
         query="什么是harness",
-        title_any=("Agent Harness", "Harness Engineering"),
+        title_any=("Agent Harness", "Harness Engineering", "LLM Harness"),
         answer_any=("Harness", "harness", "支架"),
         forbidden=("文件哈希", "提取方法", "公众号biz"),
     ),
@@ -201,9 +201,9 @@ category: uploads
 
 ## 📄 原始内容预览
 
-在纯在线部署里，上传文件后的结构化处理需要使用 DeepSeek provider。
-如果环境配置为 online_only，系统必须阻止 Gemma 或 Ollama 被调用。
-这个规则用于避免没有本地模型的服务器在上传文件时卡住。
+In an online-only deployment, structured processing after file upload must use the DeepSeek provider.
+When the environment is configured as online_only, the system must prevent Gemma or Ollama from being called.
+This rule prevents servers without local models from hanging during uploaded-file processing.
 """,
             encoding="utf-8",
         )
@@ -219,6 +219,25 @@ category: uploads
         )
 
         failures = check_search(searcher, case) + check_qa(qa, case)
+
+        english_result = qa.answer_question(
+            "Will online_only uploads call Gemma?",
+            max_docs=4,
+            use_cache=False,
+            answer_mode="extractive",
+        )
+        english_answer = english_result.get("answer", "")
+        if english_result.get("response_language") != "en":
+            failures.append(
+                f"english QA response_language={english_result.get('response_language')!r}"
+            )
+        if "**Conclusion**" not in english_answer or "📚 Sources:" not in english_answer:
+            failures.append("english QA did not use English answer labels")
+        if "[Doc1]" not in english_answer and "[Doc 1]" not in english_answer:
+            failures.append("english QA did not use English citation markers")
+        if "📚 参考文档:" in english_answer or "**结论**" in english_answer:
+            failures.append("english QA leaked Chinese answer labels")
+
         if failures:
             print("FAIL synthetic-upload")
             for failure in failures:

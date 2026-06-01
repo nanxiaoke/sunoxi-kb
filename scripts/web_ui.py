@@ -985,6 +985,7 @@ def search():
                 "context_preview": result.get("context_preview", ""),
                 "diagnostics": result.get("diagnostics", {}),
                 "answer_mode": result.get("answer_mode", ""),
+                "response_language": result.get("response_language", ""),
                 "llm": result.get("llm"),
             })
         except Exception as e:
@@ -2788,7 +2789,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                 <div v-if="msg.sources && msg.sources.length > 0" class="mt-4 pt-3 border-t border-base-content/10 flex flex-col gap-2">
                                     <div class="text-xs opacity-70 font-semibold mb-1">📚 参考来源</div>
                                     <div class="flex flex-wrap gap-2">
-                                        <div v-for="src in msg.sources" :key="src.path" @click="previewDoc(src.path)" class="bg-base-100/50 hover:bg-base-100 rounded-lg p-2 text-sm cursor-pointer border border-base-content/10 transition-colors flex items-start gap-2 max-w-full">
+                                        <div v-for="src in msg.sources" :key="src.path" @click="previewDoc(src.path)" class="bg-base-100/50 hover:bg-base-100 rounded-lg p-2 text-sm cursor-pointer border border-base-content/10 transition-colors flex items-start gap-2 w-full sm:w-auto max-w-full">
                                             <span class="text-lg">📄</span>
                                             <div class="truncate flex-1">
                                                 <div class="truncate font-medium">{{ src.title }}</div>
@@ -2796,6 +2797,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                     <span class="text-primary">{{ src.score ? src.score.toFixed(1) : '' }}</span>
                                                 </div>
                                                 <div v-if="src.matched_snippets?.length" class="text-xs opacity-70 mt-1 max-h-10 overflow-hidden whitespace-normal">{{ src.matched_snippets[0] }}</div>
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    <button class="btn btn-[10px] btn-outline min-h-0 h-6 px-2" @click.stop="previewDoc(src.path)">预览</button>
+                                                    <button class="btn btn-[10px] btn-ghost min-h-0 h-6 px-2" @click.stop="focusDocInList(src.path)">列表定位</button>
+                                                    <button class="btn btn-[10px] btn-ghost min-h-0 h-6 px-2" @click.stop="openDocAudit(src.path)">审计</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -3074,7 +3080,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
                             <div v-else class="divide-y divide-base-300 max-h-[calc(100dvh-22rem)] overflow-y-auto">
                                 <div v-for="doc in pagedVisibleDocs" :key="doc.relpath"
-                                    class="group flex items-center gap-3 px-4 py-3 hover:bg-base-300/60 cursor-pointer transition-colors"
+                                    class="group flex flex-wrap sm:flex-nowrap items-center gap-3 px-4 py-3 hover:bg-base-300/60 cursor-pointer transition-colors"
                                     @click="previewDoc(doc.relpath)">
                                     <div class="text-2xl shrink-0">📄</div>
                                     <div class="min-w-0 flex-1">
@@ -3091,7 +3097,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div v-if="doc.quality && !doc.quality.ok" class="hidden lg:flex flex-wrap gap-1 shrink-0 max-w-xs">
                                         <span v-for="issue in doc.quality.issues" :key="doc.relpath + issue" class="badge badge-xs badge-outline badge-warning">{{ issueLabel(issue) }}</span>
                                     </div>
-                                    <button v-if="doc.quality && !doc.quality.ok" @click.stop="repairDocQuality(doc.relpath)" class="btn btn-xs btn-warning opacity-80 md:opacity-0 group-hover:opacity-100 transition-opacity" title="修复摘要/关键点/实体">修复</button>
+                                    <div class="flex items-center gap-1 shrink-0 ml-auto opacity-90 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button @click.stop="previewDoc(doc.relpath)" class="btn btn-xs btn-outline" title="打开预览">预览</button>
+                                        <button v-if="doc.quality && !doc.quality.ok" @click.stop="repairDocQuality(doc.relpath)" class="btn btn-xs btn-warning" title="修复摘要/关键点/实体">修复</button>
+                                        <button @click.stop="openDocAudit(doc.relpath)" class="btn btn-xs btn-ghost" title="查看 LLM 审计">审计</button>
+                                    </div>
                                     <button @click.stop="deleteDoc(doc.relpath)" class="btn btn-xs btn-ghost btn-circle text-error opacity-60 md:opacity-0 group-hover:opacity-100 transition-opacity" title="删除">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
@@ -3734,9 +3744,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div class="font-semibold mb-2">{{ t('settings.recentLlmDocs') }}</div>
                                     <div class="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
                                         <table class="table table-xs">
-                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Retrans</th><th>Repair</th><th>Chain</th></tr></thead>
+                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Retrans</th><th>Repair</th><th>Chain</th><th>Action</th></tr></thead>
                                             <tbody>
-                                                <tr v-for="item in (llmAudit.items || []).slice(0,10)" :key="item.path" class="hover cursor-pointer" @click="previewDoc(item.path)">
+                                                <tr v-for="item in (llmAudit.items || []).slice(0,10)" :key="item.path" class="hover cursor-pointer" @click="openAuditDoc(item)">
                                                     <td class="max-w-xs truncate">{{ item.title || item.path }}</td>
                                                     <td class="font-mono">{{ item.llm?.flow || '-' }}</td>
                                                     <td class="font-mono">{{ item.llm?.provider || '-' }}</td>
@@ -3747,6 +3757,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                     <td>
                                                         <span v-for="step in (item.generation_chain || [])" :key="item.path + step.type" class="badge badge-xs badge-outline mr-1">{{ step.type }}</span>
                                                     </td>
+                                                    <td><button class="btn btn-xs btn-outline" @click.stop="openAuditDoc(item)">打开</button></td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -3988,9 +3999,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
         <!-- Right Side Panel: Document Preview / Edit Drawer -->
         <div :class="['fixed inset-y-0 right-0 w-full md:w-[32rem] bg-base-100 border-l border-base-300 shadow-2xl z-50 transform transition-transform duration-300 flex flex-col', previewOpen ? 'translate-x-0' : 'translate-x-full']">
-            <div class="p-4 border-b border-base-300 flex justify-between items-center bg-base-200">
-                <div class="font-medium truncate max-w-[70%] text-sm">{{ previewDocName }}</div>
-                <div class="flex gap-2 flex-wrap justify-end">
+            <div class="p-4 border-b border-base-300 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 bg-base-200">
+                <div class="font-medium truncate max-w-full sm:max-w-[70%] text-sm">{{ previewDocName }}</div>
+                <div class="flex gap-2 flex-wrap justify-start sm:justify-end">
                     <template v-if="previewMode === 'candidate'">
                         <button class="btn btn-sm btn-outline" @click="translateCandidate(candidateWorkbenchItem?.id, { refreshPreview: true })" :disabled="translatingCandidateId === candidateWorkbenchItem?.id">
                             <span v-if="translatingCandidateId === candidateWorkbenchItem?.id" class="loading loading-spinner loading-xs mr-1"></span>翻译
@@ -4091,6 +4102,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <span v-if="previewMeta.quality_repair?.method" class="badge badge-sm badge-accent">质量修复 · {{ previewMeta.quality_repair.method }}</span>
                         </div>
                         <div v-if="previewMeta.quality && !previewMeta.quality.ok" class="mt-2 opacity-70">问题：{{ issueText(previewMeta.quality.issues || []) }}</div>
+                        <div v-if="previewAuditItem" class="mt-3 rounded-xl border border-info/30 bg-info/10 p-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="font-semibold text-info">LLM 审计链路</div>
+                                <div class="opacity-60">{{ previewAuditItem.llm?.status || '-' }} · {{ previewAuditItem.modified || '' }}</div>
+                            </div>
+                            <div class="mt-2 flex flex-wrap gap-1">
+                                <span v-for="step in (previewAuditItem.generation_chain || [])" :key="previewAuditItem.path + step.type" class="badge badge-xs badge-outline">
+                                    {{ step.type }}<template v-if="step.provider"> · {{ step.provider }}</template><template v-if="step.model"> / {{ step.model }}</template><template v-if="step.status"> · {{ step.status }}</template>
+                                </span>
+                            </div>
+                            <div v-if="previewAuditItem.llm?.fallback_from" class="mt-2 text-warning">fallback：{{ previewAuditItem.llm.fallback_from }} → {{ previewAuditItem.llm.fallback_to }}</div>
+                        </div>
                     </div>
                     <div v-if="previewRelated.length" class="border-b border-base-300 bg-base-200/60 p-4">
                         <div class="flex items-center justify-between gap-2 mb-3">
@@ -4409,6 +4432,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const previewRelated = ref([]);
                 const previewAssociation = ref(null);
                 const previewMeta = ref({});
+                const previewAuditItem = ref(null);
                 const previewMode = ref('document');
                 const candidateWorkbenchItem = ref(null);
                 const isEditingDoc = ref(false);
@@ -4561,11 +4585,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     previewRelated.value = [];
                     previewAssociation.value = null;
                     previewMeta.value = {};
+                    previewAuditItem.value = null;
                     previewMode.value = 'document';
                     candidateWorkbenchItem.value = null;
                 };
 
-                const previewDoc = async (path) => {
+                const previewDoc = async (path, options = {}) => {
                     previewDocPath.value = path;
                     previewDocName.value = path.split('/').pop();
                     previewOpen.value = true;
@@ -4575,6 +4600,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     previewRelated.value = [];
                     previewAssociation.value = null;
                     previewMeta.value = {};
+                    previewAuditItem.value = options.auditItem || null;
                     previewMode.value = 'document';
                     candidateWorkbenchItem.value = null;
                     
@@ -4593,6 +4619,35 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         showToast("加载失败", "error");
                     } finally {
                         previewLoading.value = false;
+                    }
+                };
+
+                const focusDocInList = async (path) => {
+                    if(!path) return;
+                    activeTab.value = 'docs';
+                    const parts = path.split('/');
+                    selectedDocFolder.value = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+                    docSearchText.value = parts[parts.length - 1] || path;
+                    docsPage.value = 1;
+                    await nextTick();
+                    previewDoc(path);
+                };
+
+                const openAuditDoc = async (item) => {
+                    if(!item?.path) return;
+                    await previewDoc(item.path, { auditItem: item });
+                };
+
+                const openDocAudit = async (path) => {
+                    if(!path) return;
+                    activeTab.value = 'settings';
+                    if(!llmAudit.value && !loadingLlmAudit.value) await loadLlmAudit();
+                    const item = (llmAudit.value?.items || []).find(x => x.path === path);
+                    if(item) {
+                        await previewDoc(path, { auditItem: item });
+                    } else {
+                        await previewDoc(path);
+                        showToast('已打开文档；当前审计筛选中未找到对应条目', 'info', 5000);
                     }
                 };
 
@@ -5250,6 +5305,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     previewRelated.value = [];
                     previewAssociation.value = null;
                     previewMeta.value = {};
+                    previewAuditItem.value = null;
                     try {
                         const res = await fetch(`/api/candidates/${encodeURIComponent(id)}`);
                         const data = await res.json();
@@ -6099,7 +6155,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     rssFeeds, loadingRssFeeds, syncingRss, rssSyncResult, rssNewForm, loadRssFeeds, saveRssFeed, deleteRssFeed, syncRss, toggleRssFeed,
                     dragOver, handleDrop, handleFileUpload, formatBytes, formatDate, stats,
                     initGraph,
-                    previewOpen, previewLoading, previewContent, previewDocName, previewRelated, previewAssociation, previewMeta, previewMode, candidateWorkbenchItem, previewDoc, closePreview, isEditingDoc, saveDocContent, saveCandidateReviewInline,
+                    previewOpen, previewLoading, previewContent, previewDocName, previewRelated, previewAssociation, previewMeta, previewAuditItem, previewMode, candidateWorkbenchItem, previewDoc, focusDocInList, openAuditDoc, openDocAudit, closePreview, isEditingDoc, saveDocContent, saveCandidateReviewInline,
                     translationModels, translationProvider, selectedTranslationModel, isRetranslating, retranslateDoc,
                     llmProviders, llmFlows, llmBackups, llmSecretSetup, llmMode, llmModeOptions, llmModeLabel, llmModeDescription, settingLlmMode,
                     fileImportFlow, fileImportProviderChain,

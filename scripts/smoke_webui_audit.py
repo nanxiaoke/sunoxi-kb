@@ -30,6 +30,9 @@ def main() -> int:
             "openDocAudit",
             "LLM 审计链路",
             "列表定位",
+            "Translation Policy",
+            "bilingual_on_import",
+            "mergeTranslationPolicy",
         ]:
             _assert(token in html, f"missing WebUI token: {token}")
 
@@ -38,6 +41,27 @@ def main() -> int:
             'use_cache=(qa_mode == "extractive")' in web_ui_source,
             "LLM QA answers should bypass persistent cache",
         )
+        _assert(
+            "provider must be online or local" not in web_ui_source,
+            "retranslation API should accept configured provider IDs",
+        )
+
+        webui_config_resp = client.get("/api/webui/config")
+        _assert(webui_config_resp.status_code == 200, f"webui config returned {webui_config_resp.status_code}")
+        webui_config = webui_config_resp.get_json()
+        policy = webui_config.get("translation_policy")
+        _assert(isinstance(policy, dict), "webui config missing translation_policy")
+        _assert(policy.get("mode") in {"off", "preview_only", "bilingual_on_import", "bilingual_for_selected"}, "invalid translation policy mode")
+        _assert(isinstance(policy.get("full_translate"), dict), "translation policy missing full_translate group")
+        _assert(isinstance(policy.get("chinese_source", {}).get("translate_to_english"), bool), "Chinese source English translation flag missing")
+        _assert(isinstance(policy.get("english_source", {}).get("translate_to_chinese"), bool), "English source Chinese translation flag missing")
+
+        models_resp = client.get("/api/translation/models")
+        _assert(models_resp.status_code == 200, f"translation models returned {models_resp.status_code}")
+        models = models_resp.get_json().get("models", [])
+        _assert(models, "expected translation models")
+        _assert(all(m.get("provider") == m.get("provider_name") for m in models), "translation model provider should be real provider ID")
+        _assert(all(m.get("kind") in {"online", "local"} for m in models), "translation model kind should classify provider")
 
         docs_resp = client.get("/api/documents")
         _assert(docs_resp.status_code == 200, f"documents returned {docs_resp.status_code}")

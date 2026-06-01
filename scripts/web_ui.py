@@ -147,6 +147,28 @@ WEBUI_CONFIG_DEFAULTS = {
         "llm_settings": True,
         "llm_audit": True,
     },
+    "translation_policy": {
+        "enabled": True,
+        "mode": "bilingual_on_import",
+        "targets": "auto_opposite",
+        "fallback_on_failure": "preview_only",
+        "candidate_tiers": ["A", "B"],
+        "preserve_original_full": True,
+        "max_chunk_chars": 3500,
+        "full_translate": {
+            "url_import": True,
+            "file_upload": True,
+            "candidate_import": True,
+            "rss_candidate_preview": False,
+            "wechat_candidate_import": True,
+        },
+        "chinese_source": {
+            "translate_to_english": True,
+        },
+        "english_source": {
+            "translate_to_chinese": True,
+        },
+    },
 }
 
 
@@ -169,7 +191,7 @@ def _deep_merge_defaults(defaults: Dict[str, Any], data: Dict[str, Any]) -> Dict
     merged = json.loads(json.dumps(defaults, ensure_ascii=False))
     for key, value in (data or {}).items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key].update(value)
+            merged[key] = _deep_merge_defaults(merged[key], value)
         else:
             merged[key] = value
     return merged
@@ -191,6 +213,7 @@ def _webui_config_payload() -> Dict[str, Any]:
         "exists": WEBUI_CONFIG.exists(),
         "app": config["app"],
         "features": config["features"],
+        "translation_policy": config["translation_policy"],
     }
 
 
@@ -198,6 +221,7 @@ def _clean_webui_config_update(payload: Dict[str, Any]) -> Dict[str, Any]:
     current = _webui_config_payload()
     app_in = payload.get("app") if isinstance(payload.get("app"), dict) else {}
     features_in = payload.get("features") if isinstance(payload.get("features"), dict) else {}
+    policy_in = payload.get("translation_policy") if isinstance(payload.get("translation_policy"), dict) else {}
 
     app = dict(current["app"])
     for key in ("name", "title", "subtitle", "logo"):
@@ -214,7 +238,41 @@ def _clean_webui_config_update(payload: Dict[str, Any]) -> Dict[str, Any]:
         if key in features_in:
             features[key] = bool(features_in[key])
 
-    return {"app": app, "features": features}
+    policy = copy_llm_runtime(current["translation_policy"])
+    for key in ("enabled", "preserve_original_full"):
+        if key in policy_in:
+            policy[key] = bool(policy_in[key])
+    for key, allowed in {
+        "mode": {"off", "preview_only", "bilingual_on_import", "bilingual_for_selected"},
+        "targets": {"auto_opposite", "zh", "en", "zh,en"},
+        "fallback_on_failure": {"preview_only", "skip", "fail_import"},
+    }.items():
+        if key in policy_in:
+            value = str(policy_in.get(key) or "").strip()
+            if value not in allowed:
+                raise ValueError(f"translation_policy.{key} must be one of: {', '.join(sorted(allowed))}")
+            policy[key] = value
+    if "candidate_tiers" in policy_in:
+        tiers_raw = policy_in.get("candidate_tiers")
+        tiers = tiers_raw if isinstance(tiers_raw, list) else re.split(r"[,，\s]+", str(tiers_raw or ""))
+        cleaned_tiers = []
+        for tier in tiers:
+            t = str(tier).strip().upper()
+            if t == "ALL":
+                cleaned_tiers = ["all"]
+                break
+            if t in {"A", "B", "C", "D"} and t not in cleaned_tiers:
+                cleaned_tiers.append(t)
+        policy["candidate_tiers"] = cleaned_tiers or ["A", "B"]
+    if "max_chunk_chars" in policy_in:
+        policy["max_chunk_chars"] = max(500, min(int(policy_in.get("max_chunk_chars") or 3500), 20000))
+    for group in ("full_translate", "chinese_source", "english_source"):
+        if isinstance(policy_in.get(group), dict):
+            for key in policy.get(group, {}):
+                if key in policy_in[group]:
+                    policy[group][key] = bool(policy_in[group][key])
+
+    return {"app": app, "features": features, "translation_policy": policy}
 
 
 def _backup_webui_config(reason: str = "manual") -> Optional[Path]:
@@ -442,7 +500,9 @@ def _translation_models() -> List[Dict[str, Any]]:
         for provider_name in flow.providers:
             p = config.provider(provider_name)
             providers.append({
-                "provider": "online" if p.is_online else "local",
+                "id": p.name,
+                "provider": p.name,
+                "kind": "online" if p.is_online else "local",
                 "provider_name": p.name,
                 "label": p.label,
                 "model": p.model,
@@ -459,10 +519,15 @@ def _translation_models() -> List[Dict[str, Any]]:
 
 
 def _resolve_translation_provider(provider: str) -> str:
+    provider = (provider or "").strip()
     models = _translation_models()
     for item in models:
-        if provider in {item.get("provider"), item.get("provider_name")}:
+        if provider in {item.get("id"), item.get("provider"), item.get("provider_name")}:
             return item.get("provider_name") or provider
+    if provider in {"online", "local"}:
+        for item in models:
+            if item.get("kind") == provider:
+                return item.get("provider_name") or item.get("id")
     raise ValueError(f"unknown translation provider: {provider}")
 
 
@@ -1859,15 +1924,17 @@ def retranslate_document(relpath: str):
         return jsonify({"error": "Not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    provider_name = (data.get("provider") or "online").strip().lower()
-    if provider_name not in {"online", "local"}:
-        return jsonify({"error": "provider must be online or local"}), 400
+    provider_name = (data.get("provider") or "deepseek_pro").strip()
+    try:
+        resolved_provider = _resolve_translation_provider(provider_name)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
     model = (data.get("model") or "").strip()
     dry_run = bool(data.get("dry_run"))
 
     try:
         old_text = wiki_file.read_text(encoding="utf-8", errors="ignore")
-        result = _translate_wiki_document(old_text, provider_name=provider_name, model=model)
+        result = _translate_wiki_document(old_text, provider_name=resolved_provider, model=model)
         new_text = _replace_frontmatter_value(old_text, "title", result["title"])
         new_text = _replace_h1(new_text, result["title"])
         if result.get("category"):
@@ -3562,6 +3629,82 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <div class="card-body p-5">
                                 <div class="flex items-start justify-between gap-3 mb-3">
                                     <div>
+                                        <h3 class="font-semibold">Translation Policy</h3>
+                                        <p class="text-xs opacity-60 mt-1">控制导入和重翻译的双语策略；不会自动启动全量批处理。</p>
+                                    </div>
+                                    <input v-model="webuiConfig.translation_policy.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                                </div>
+                                <div class="grid md:grid-cols-3 gap-3">
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">Mode</span></div>
+                                        <select v-model="webuiConfig.translation_policy.mode" class="select select-sm select-bordered">
+                                            <option value="off">off</option>
+                                            <option value="preview_only">preview_only</option>
+                                            <option value="bilingual_on_import">bilingual_on_import</option>
+                                            <option value="bilingual_for_selected">bilingual_for_selected</option>
+                                        </select>
+                                    </label>
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">Targets</span></div>
+                                        <select v-model="webuiConfig.translation_policy.targets" class="select select-sm select-bordered">
+                                            <option value="auto_opposite">auto_opposite</option>
+                                            <option value="zh">zh</option>
+                                            <option value="en">en</option>
+                                            <option value="zh,en">zh,en</option>
+                                        </select>
+                                    </label>
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">Fallback</span></div>
+                                        <select v-model="webuiConfig.translation_policy.fallback_on_failure" class="select select-sm select-bordered">
+                                            <option value="preview_only">preview_only</option>
+                                            <option value="skip">skip</option>
+                                            <option value="fail_import">fail_import</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-3 gap-3 mt-3">
+                                    <label class="form-control">
+                                        <div class="label py-1"><span class="label-text text-xs">Chunk chars</span></div>
+                                        <input v-model.number="webuiConfig.translation_policy.max_chunk_chars" type="number" min="500" max="20000" class="input input-sm input-bordered" />
+                                    </label>
+                                    <label class="label cursor-pointer justify-start gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2 mt-6">
+                                        <input v-model="webuiConfig.translation_policy.preserve_original_full" type="checkbox" class="checkbox checkbox-sm" />
+                                        <span class="label-text text-xs">保留完整原文</span>
+                                    </label>
+                                    <div class="rounded-xl border border-base-300 bg-base-100 px-3 py-2">
+                                        <div class="text-xs opacity-60 mb-2">Candidate tiers</div>
+                                        <div class="flex flex-wrap gap-2 text-xs">
+                                            <label v-for="tier in ['A','B','C','D']" :key="'tier-'+tier" class="label cursor-pointer gap-1 p-0">
+                                                <input v-model="webuiConfig.translation_policy.candidate_tiers" :value="tier" type="checkbox" class="checkbox checkbox-xs" />
+                                                <span>{{ tier }}</span>
+                                            </label>
+                                            <label class="label cursor-pointer gap-1 p-0">
+                                                <input v-model="webuiConfig.translation_policy.candidate_tiers" value="all" type="checkbox" class="checkbox checkbox-xs" />
+                                                <span>all</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="grid md:grid-cols-3 gap-2 text-xs mt-3">
+                                    <label v-for="key in Object.keys(webuiConfig.translation_policy.full_translate || {})" :key="'full-'+key" class="label cursor-pointer justify-start gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
+                                        <input v-model="webuiConfig.translation_policy.full_translate[key]" type="checkbox" class="checkbox checkbox-xs" />
+                                        <span class="font-mono">{{ key }}</span>
+                                    </label>
+                                    <label class="label cursor-pointer justify-start gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
+                                        <input v-model="webuiConfig.translation_policy.chinese_source.translate_to_english" type="checkbox" class="checkbox checkbox-xs" />
+                                        <span>中文源文 → English</span>
+                                    </label>
+                                    <label class="label cursor-pointer justify-start gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
+                                        <input v-model="webuiConfig.translation_policy.english_source.translate_to_chinese" type="checkbox" class="checkbox checkbox-xs" />
+                                        <span>English source → 中文</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="card bg-base-200 border border-base-300 rounded-2xl">
+                            <div class="card-body p-5">
+                                <div class="flex items-start justify-between gap-3 mb-3">
+                                    <div>
                                         <h3 class="font-semibold">{{ t('settings.features') }}</h3>
                                         <p class="text-xs opacity-60 mt-1">{{ t('settings.featureHint') }}</p>
                                     </div>
@@ -4016,7 +4159,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     <template v-else>
                         <select v-if="!isEditingDoc" v-model="translationProvider" class="select select-sm select-bordered max-w-36" title="Translation provider">
                             <option v-for="m in translationModels" :key="m.provider" :value="m.provider" :disabled="!m.available">
-                                {{ m.provider === 'online' ? 'Online' : 'Local' }}{{ m.available ? '' : ' · unavailable' }}
+                                {{ m.label || m.provider_name || m.provider }} · {{ m.kind || (m.online ? 'online' : 'local') }}{{ m.available ? '' : (m.key_env ? ' · missing ' + m.key_env : ' · unavailable') }}
                             </option>
                         </select>
                         <button class="btn btn-sm btn-outline" v-if="!isEditingDoc" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath">
@@ -4168,9 +4311,40 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const associationReport = ref(null);
                 const loadingAssociations = ref(false);
                 const uiLang = ref(localStorage.getItem('kb_ui_lang') || 'zh');
+                const defaultTranslationPolicy = () => ({
+                    enabled: true,
+                    mode: 'bilingual_on_import',
+                    targets: 'auto_opposite',
+                    fallback_on_failure: 'preview_only',
+                    candidate_tiers: ['A', 'B'],
+                    preserve_original_full: true,
+                    max_chunk_chars: 3500,
+                    full_translate: {
+                        url_import: true,
+                        file_upload: true,
+                        candidate_import: true,
+                        rss_candidate_preview: false,
+                        wechat_candidate_import: true
+                    },
+                    chinese_source: { translate_to_english: true },
+                    english_source: { translate_to_chinese: true }
+                });
+                const mergeTranslationPolicy = (policy = {}) => {
+                    const defaults = defaultTranslationPolicy();
+                    const incoming = policy || {};
+                    return {
+                        ...defaults,
+                        ...incoming,
+                        candidate_tiers: Array.isArray(incoming.candidate_tiers) ? incoming.candidate_tiers : defaults.candidate_tiers,
+                        full_translate: { ...defaults.full_translate, ...(incoming.full_translate || {}) },
+                        chinese_source: { ...defaults.chinese_source, ...(incoming.chinese_source || {}) },
+                        english_source: { ...defaults.english_source, ...(incoming.english_source || {}) }
+                    };
+                };
                 const webuiConfig = ref({
                     app: { name: 'Sunoxi KB', title: 'Sunoxi 知识库', subtitle: 'Personal Knowledge Base', logo: '/static/favicon.svg?v=4' },
-                    features: { chat: true, graph: true, documents: true, upload: true, url_import: true, candidates: true, rss: true, wechat: true, llm_settings: true, llm_audit: true }
+                    features: { chat: true, graph: true, documents: true, upload: true, url_import: true, candidates: true, rss: true, wechat: true, llm_settings: true, llm_audit: true },
+                    translation_policy: defaultTranslationPolicy()
                 });
                 const loadingWebuiConfig = ref(false);
                 const savingWebuiConfig = ref(false);
@@ -4260,7 +4434,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         const res = await fetch('/api/webui/config');
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        webuiConfig.value = { app: data.app || webuiConfig.value.app, features: data.features || webuiConfig.value.features };
+                        webuiConfig.value = {
+                            app: data.app || webuiConfig.value.app,
+                            features: data.features || webuiConfig.value.features,
+                            translation_policy: mergeTranslationPolicy(data.translation_policy || webuiConfig.value.translation_policy)
+                        };
                     } catch(e) {
                         showToast(`加载系统设置失败: ${e.message}`, 'error', 7000);
                     } finally {
@@ -4278,7 +4456,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         });
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        webuiConfig.value = { app: data.app || webuiConfig.value.app, features: data.features || webuiConfig.value.features };
+                        webuiConfig.value = {
+                            app: data.app || webuiConfig.value.app,
+                            features: data.features || webuiConfig.value.features,
+                            translation_policy: mergeTranslationPolicy(data.translation_policy || webuiConfig.value.translation_policy)
+                        };
                         showToast('系统设置已保存', 'success');
                     } catch(e) {
                         showToast(`保存系统设置失败: ${e.message}`, 'error', 7000);
@@ -4437,7 +4619,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const candidateWorkbenchItem = ref(null);
                 const isEditingDoc = ref(false);
                 const translationModels = ref([]);
-                const translationProvider = ref('online');
+                const translationProvider = ref('local_gemma4');
                 const isRetranslating = ref(false);
                 const llmProviders = ref([]);
                 const llmFlows = ref([]);
@@ -4453,7 +4635,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const savingLlmConfig = ref(false);
                 const restoringLlmBackup = ref('');
                 const objectEntries = (obj) => Object.entries(obj || {});
-                const selectedTranslationModel = computed(() => translationModels.value.find(m => m.provider === translationProvider.value) || null);
+                const selectedTranslationModel = computed(() => translationModels.value.find(m => m.provider === translationProvider.value || m.provider_name === translationProvider.value || m.id === translationProvider.value) || null);
+                const translationProviderLabel = (model) => {
+                    if(!model) return translationProvider.value || '-';
+                    const kind = model.kind === 'online' ? '在线' : '本地';
+                    return `${model.label || model.provider_name || model.provider || kind} · ${model.model || '-'}`;
+                };
                 const llmModeLabel = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.label) || llmMode.value || 'custom');
                 const llmModeDescription = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.description) || '');
                 const fileImportFlow = computed(() => llmFlows.value.find(f => f.name === 'file_import_structure') || null);
@@ -4674,14 +4861,17 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         const res = await fetch('/api/translation/models');
                         const data = await res.json();
                         translationModels.value = data.models || [];
-                        const current = translationModels.value.find(m => m.provider === translationProvider.value);
+                        const current = selectedTranslationModel.value;
                         if(!current || current.available === false) {
                             const firstAvailable = translationModels.value.find(m => m.available);
-                            translationProvider.value = firstAvailable?.provider || translationModels.value[0]?.provider || 'online';
+                            translationProvider.value = firstAvailable?.provider || translationModels.value[0]?.provider || 'local_gemma4';
                         }
                     } catch(e) {
-                        translationModels.value = [{ provider: 'online', model: 'deepseek-v4-pro', available: false }, { provider: 'local', model: 'gemma4:e4b', available: true }];
-                        translationProvider.value = 'local';
+                        translationModels.value = [
+                            { id: 'deepseek_pro', provider: 'deepseek_pro', provider_name: 'deepseek_pro', kind: 'online', label: 'DeepSeek Pro', model: 'deepseek-v4-pro', available: false, key_env: 'DEEPSEEK_API_KEY' },
+                            { id: 'local_gemma4', provider: 'local_gemma4', provider_name: 'local_gemma4', kind: 'local', label: 'Local Gemma4', model: 'gemma4:e4b', available: true }
+                        ];
+                        translationProvider.value = 'local_gemma4';
                     }
                 };
 
@@ -4689,11 +4879,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     if(!previewDocPath.value || isRetranslating.value) return;
                     const selected = selectedTranslationModel.value || {};
                     if(selected.available === false) {
-                        showToast(`${selected.provider === 'online' ? '在线' : '本地'}模型不可用${selected.key_env ? `：缺少 ${selected.key_env}` : ''}`, 'warning', 6000);
+                        showToast(`${translationProviderLabel(selected)} 不可用${selected.key_env ? `：缺少 ${selected.key_env}` : ''}`, 'warning', 6000);
                         return;
                     }
                     isRetranslating.value = true;
-                    showToast(`正在使用 ${translationProvider.value === 'online' ? '在线模型' : '本地模型'} 生成重翻译预览...`, 'info', 6000);
+                    showToast(`正在使用 ${translationProviderLabel(selected)} 生成重翻译预览...`, 'info', 6000);
                     try {
                         const previewRes = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}/translate`, {
                             method: 'POST',

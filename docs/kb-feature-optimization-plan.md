@@ -367,3 +367,32 @@ Task H: WebUI usability polish.
 - 2026-06-01: Mobile layout hardening pass: source cards use full width on small screens, document rows wrap before narrow overflow, row actions align to the trailing edge, and the preview drawer header stacks title/actions on small screens.
 - 2026-06-01: QA answer language now follows the question language. Extractive answers use Chinese or English section/source labels, LLM QA prompts are language-aware, cache keys include response language, `/api/search?qa=true` returns `response_language`, and search/QA smoke coverage includes an English bilingual-answer case.
 - 2026-06-01: QA model-generated answers no longer use the persistent QA cache; only extractive answers remain cacheable. Existing `qa_cache.json` was backed up and cleared to remove stale bad answers.
+
+## Current Planned Task I
+
+Task I: Translation Policy and bilingual import controls.
+
+### Scope
+
+- Make bilingual translation behavior explicit and configurable instead of hidden in each import path.
+- Support English-source and Chinese-source documents with opposite-language full translation targets.
+- Keep original full text available for retrieval and audit whenever translation is generated.
+- Fix single-document retranslation provider selection so the WebUI can use configured provider IDs.
+- Avoid launching expensive all-document retranslation from configuration changes alone.
+
+### Task I Subtasks
+
+- [x] Add a `translation_policy` section to WebUI config with defaults for bilingual import.
+- [x] Add WebUI controls for mode, targets, fallback behavior, candidate tiers, chunk size, and per-import-path full translation toggles.
+- [x] Return real translation provider IDs from `/api/translation/models` while preserving online/local kind metadata.
+- [x] Let the single-document retranslation endpoint accept configured provider IDs and keep compatibility for old `online`/`local` requests.
+- [x] Add smoke coverage for Translation Policy config and provider ID shape.
+- [ ] Wire the policy into every import path so URL/file/RSS/WeChat/candidate imports consistently apply bilingual full translation.
+- [ ] Add a selected-document/batch backfill flow that can generate missing opposite-language full translations without blocking normal imports.
+
+### Implementation Progress
+
+- 2026-06-01: Added `translation_policy` to WebUI config and settings. Defaults favor bilingual import with `targets=auto_opposite`, full-original preservation, A/B candidate import coverage, and preview-only fallback on translation failures.
+- 2026-06-01: `/api/translation/models` now exposes real provider IDs (`deepseek_pro`, `local_gemma4`) plus `kind=online/local`; single-document retranslation accepts those IDs and resolves legacy `online/local` requests for compatibility.
+- 2026-06-01: Retranslation UI now chooses the first available provider, displays provider label/model/key status, and sends the real provider ID to the API.
+- 2026-06-01: `scripts/smoke_webui_audit.py` now asserts Translation Policy availability, default Chinese/English opposite-language settings, real provider IDs, and generated QA cache bypass.

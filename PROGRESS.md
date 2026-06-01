@@ -1027,3 +1027,21 @@ python3 scripts/processor.py --process-all
 - `python3 -m py_compile scripts/web_ui.py scripts/qa.py scripts/smoke_search_qa.py scripts/smoke_webui_audit.py` 通过。
 - `python3 scripts/smoke_search_qa.py` 通过。
 - `python3 scripts/smoke_webui_audit.py` 通过。
+
+## 2026-06-01 - Task I：Translation Policy 与重翻译控制
+
+### 已完成
+- WebUI 配置新增 `translation_policy`，用于记录导入和重翻译的双语策略：
+  - 默认启用 `bilingual_on_import`。
+  - 默认 `targets=auto_opposite`，英文源文生成中文，中文源文生成英文。
+  - 默认保留完整原文，A/B 候选正式导入、URL 导入、文件上传、公众号候选导入可做全文翻译；RSS 候选池预览不默认全文翻译。
+  - `fallback_on_failure=preview_only`，翻译失败时优先保留预览/原文，不阻断知识库可用性。
+- `/api/webui/config` 的 GET/PATCH 现在会读写并校验 `translation_policy`，支持嵌套配置合并。
+- 系统设置页新增 `Translation Policy` 配置区，可以调整 mode、targets、fallback、chunk chars、candidate tiers 和各导入路径的全文翻译开关。
+- `/api/translation/models` 改为返回真实 provider ID（如 `deepseek_pro`、`local_gemma4`）和 `kind=online/local`，避免前端用 `online/local` 映射错误 provider。
+- 单文档重翻译 API 现在接受配置中的真实 provider ID，同时保留旧的 `online/local` 兼容解析。
+- 文档预览抽屉的重翻译下拉框改为显示 provider label、模型和缺失 key 状态；可用 provider 会自动优先选中。
+
+### 验证
+- `scripts/smoke_webui_audit.py` 增加 Translation Policy、translation model provider ID 和 LLM QA cache bypass 回归断言。
+- 本任务只落地策略配置和操作入口修复，不自动触发全量重翻译批处理。

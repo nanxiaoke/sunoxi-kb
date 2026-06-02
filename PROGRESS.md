@@ -1045,3 +1045,36 @@ python3 scripts/processor.py --process-all
 ### 验证
 - `scripts/smoke_webui_audit.py` 增加 Translation Policy、translation model provider ID 和 LLM QA cache bypass 回归断言。
 - 本任务只落地策略配置和操作入口修复，不自动触发全量重翻译批处理。
+
+## 2026-06-02 - Task I：导入路径接入 Translation Policy
+
+### 已完成
+- 新增 `scripts/translation_policy.py` 作为共享策略模块，统一读取 `config/webui.yaml` 的 `translation_policy`，提供源语言检测、目标语言解析、candidate tier 判断和导入路径开关判断。
+- `BatchProcessor` 的 URL/file 导入接入策略：
+  - `raw/webpages` 使用 `url_import` 开关。
+  - 其他直接文件导入使用 `file_upload` 开关。
+  - 英文源文按策略生成 `## 🌐 中文翻译`，中文源文按策略生成 `## 🌍 English Translation`。
+  - 全文翻译使用 `full_translation` flow 分片执行，并写入 `llm_full_translation` frontmatter 元数据。
+  - 默认 `preview_only`/`skip` fallback 不阻断原文入库；只有 `fail_import` 会让导入失败。
+  - 已包含双语 section 的 raw 内容会跳过二次全文翻译，避免候选导入后重复消耗模型。
+- `CandidateTranslator` 从固定英文→中文扩展为支持 `target_language=zh/en`，sidecar 兼容 `_zh.json`，并新增 `_en.json` 用于中文源文英译。
+- `CandidateManager.import_candidate` 接入策略：
+  - RSS/other 候选正式导入走 `candidate_import`。
+  - WeChat 中文候选正式导入走 `wechat_candidate_import`，可生成英文全文译文。
+  - candidate tiers 不再硬编码 A/B，改用 `translation_policy.candidate_tiers`。
+  - 导入状态里的 translation meta 记录 `target_language` 和对应 sidecar 路径。
+- `RSSManager` 的候选池中文预览接入 `rss_candidate_preview` 开关，默认不在 RSS 同步阶段触发 LLM 翻译，避免周期同步被翻译阻塞。
+- `scripts/smoke_import_quality.py` 增加非网络回归：
+  - URL 中文源文生成 English Translation section 和 `llm_full_translation` 元数据。
+  - 已含双语 section 的 raw 内容不会再次触发全文翻译。
+  - 默认 policy 决策覆盖 URL、RSS preview、A/D tier candidate。
+  - WeChat 中文候选正式导入生成 English Translation section。
+
+### 验证
+- `python3 -m py_compile scripts/translation_policy.py scripts/translator.py scripts/candidate_manager.py scripts/batch_processor.py scripts/rss_sync.py scripts/web_ui.py scripts/smoke_import_quality.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_import_quality.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+
+### 当前状态
+- 新导入内容已按 Translation Policy 接入双语全文生成路径。
+- 还没有对历史文章执行 backfill/全量重翻译；下一步可做“选中文档/批量补齐缺失 opposite-language 全文译文”的安全任务。

@@ -24,6 +24,12 @@ from typing import Dict, List, Optional, Set, Any
 from collections import Counter
 
 from llm_service import LLMService
+from translation_policy import (
+    load_translation_policy,
+    section_title_for,
+    should_translate_import,
+    target_languages_for,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +74,7 @@ class BatchProcessor:
         self.llm = LLMService()
         self.model = self.llm.config.provider(self.llm.config.flow("file_import_structure").providers[0]).model
         self.last_error: Optional[str] = None
+        self.translation_policy = load_translation_policy(self.base_dir)
         
         # 加载处理进度
         self.processed_files = self._load_progress()
@@ -150,6 +157,89 @@ class BatchProcessor:
             f" (fallback from {result.fallback_from})" if result.fallback_from else "",
         )
         return result.content, meta
+
+    def _chunks(self, text: str, max_chars: int) -> List[str]:
+        text = (text or "").strip()
+        if not text:
+            return []
+        if len(text) <= max_chars:
+            return [text]
+        parts = re.split(r"(\n\n+)", text)
+        chunks, cur = [], ""
+        for part in parts:
+            if len(cur) + len(part) > max_chars and cur.strip():
+                chunks.append(cur.strip())
+                cur = part
+            else:
+                cur += part
+        if cur.strip():
+            chunks.append(cur.strip())
+        final: List[str] = []
+        for chunk in chunks:
+            if len(chunk) <= max_chars:
+                final.append(chunk)
+            else:
+                final.extend(chunk[i:i + max_chars] for i in range(0, len(chunk), max_chars))
+        return final
+
+    def _translate_full_content(self, content: str, *, title: str, source_language: str, target_language: str) -> tuple[str, Dict[str, Any]]:
+        """Generate policy-controlled full translation for direct URL/file imports."""
+        flow_name = "full_translation"
+        policy = self.llm.config.flow(flow_name)
+        cfg = policy.options
+        chunk_chars = int(self.translation_policy.get("max_chunk_chars") or policy.chunk_chars or cfg.get("chunk_chars") or 3500)
+        target_name = "中文" if target_language == "zh" else "English"
+        source_name = "英文" if source_language == "en" else "中文"
+        system = (
+            "你是专业的 AI/软件工程技术翻译。输出忠实、准确、自然、可检索的中文。"
+            if target_language == "zh"
+            else "You are a professional AI/software engineering translator. Produce faithful, accurate, natural, searchable English."
+        )
+        outputs: List[str] = []
+        chunks_meta: List[Dict[str, Any]] = []
+        for idx, chunk in enumerate(self._chunks(content, chunk_chars), 1):
+            prompt = f"""请把下面{source_name}技术内容翻译成{target_name}。
+
+要求：
+1. 忠实翻译，不总结、不扩写、不删减事实。
+2. 保留 Markdown 结构、列表、链接、代码、命令和配置项。
+3. 产品名、模型名、公司名、论文名、项目名、URL、版本号不翻译。
+4. 技术术语首次出现尽量中英并列，后续保持术语一致。
+
+标题：{title}
+分片：{idx}
+
+待翻译内容：
+{chunk}
+
+只输出{target_name}译文，不要解释。"""
+            result = self.llm.chat(flow_name, [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ], options={
+                "temperature": cfg.get("temperature", 0.1),
+                "think": bool(cfg.get("think", False)),
+                **({"num_predict": int(cfg.get("num_predict"))} if cfg.get("num_predict") else {}),
+            })
+            meta = result.to_dict()
+            if result.status != "ok":
+                raise RuntimeError(result.error or f"{flow_name} chunk {idx} failed")
+            outputs.append((result.content or "").strip())
+            meta.pop("content", None)
+            meta["chunk_index"] = idx
+            meta["chunk_chars"] = len(chunk)
+            chunks_meta.append(meta)
+        first = chunks_meta[0] if chunks_meta else {}
+        return "\n\n".join(x for x in outputs if x), {
+            "flow": flow_name,
+            "provider": first.get("provider") or (policy.providers[0] if policy.providers else ""),
+            "model": first.get("model") or "",
+            "status": first.get("status", "ok") if chunks_meta else "skipped",
+            "target_language": target_language,
+            "source_language": source_language,
+            "chunk_count": len(chunks_meta),
+            "chunks": chunks_meta,
+        }
     
     def _detect_language(self, text: str) -> str:
         """检测文本语言"""
@@ -486,6 +576,41 @@ class BatchProcessor:
         tags = self._normalize_list(review_tags)
         if category not in tags:
             tags.insert(0, category)
+
+        policy_path_key = "url_import" if file_info["category"] == "webpages" else "file_upload"
+        already_bilingual = bool(re.search(
+            r"(?m)^##\s*(?:🌐\s*中文翻译|中文译文|🌍\s*English Translation|English Translation|英文原文|中文原文|English Original)",
+            content,
+        ))
+        full_translation_body = ""
+        full_translation_target = ""
+        full_translation_meta: Dict[str, Any] = {}
+        target_languages = target_languages_for(self.translation_policy, lang)
+        if not already_bilingual and target_languages and should_translate_import(self.translation_policy, path_key=policy_path_key, source_language=lang):
+            full_translation_target = target_languages[0]
+            try:
+                logger.info(f"  全文翻译中... {lang} -> {full_translation_target}")
+                full_translation_body, full_translation_meta = self._translate_full_content(
+                    content_body or content,
+                    title=title,
+                    source_language=lang,
+                    target_language=full_translation_target,
+                )
+                if full_translation_target == "zh":
+                    translated_body = full_translation_body or translated_body
+            except Exception as e:
+                logger.warning(f"  全文翻译失败，按策略处理: {e}")
+                full_translation_meta = {
+                    "flow": "full_translation",
+                    "status": "error",
+                    "error": str(e),
+                    "source_language": lang,
+                    "target_language": full_translation_target,
+                }
+                if str(self.translation_policy.get("fallback_on_failure") or "preview_only") == "fail_import":
+                    self.last_error = f"全文翻译失败: {e}"
+                    return None
+
         # 映射到wiki分类目录
         cat_map = {
             "技术": "technologies",
@@ -511,12 +636,26 @@ class BatchProcessor:
         tag_lines = "\n".join([f"  - {self._yaml_quote(t)}" for t in tags]) or f"  - {self._yaml_quote(category)}"
         entities_text = "\n".join([f"- {entity}" for entity in entities_list]) if entities_list else "（未提取到实体）"
         translation_section = ""
-        if translated_body:
+        section_target = full_translation_target or ("zh" if translated_body else "")
+        section_body = full_translation_body or translated_body
+        if section_body and section_target:
             translation_section = f"""
-## 🌐 中文翻译
+## {section_title_for(section_target)}
 
-{translated_body}
+{section_body}
 
+"""
+        full_translation_meta_yaml = ""
+        if full_translation_meta:
+            full_translation_meta_yaml = f"""llm_full_translation:
+  flow: {self._yaml_quote(full_translation_meta.get('flow', 'full_translation'))}
+  provider: {self._yaml_quote(full_translation_meta.get('provider', ''))}
+  model: {self._yaml_quote(full_translation_meta.get('model', ''))}
+  status: {self._yaml_quote(full_translation_meta.get('status', ''))}
+  source_language: {self._yaml_quote(full_translation_meta.get('source_language', lang))}
+  target_language: {self._yaml_quote(full_translation_meta.get('target_language', full_translation_target))}
+  chunk_count: {int(full_translation_meta.get('chunk_count') or 0)}
+  error: {self._yaml_quote(full_translation_meta.get('error', ''))}
 """
         # 6. 构建wiki内容
         wiki_content = f"""---
@@ -534,6 +673,7 @@ llm:
   fallback_from: {self._yaml_quote(llm_meta.get('fallback_from') or '')}
   fallback_to: {self._yaml_quote(llm_meta.get('fallback_to') or '')}
   generated_at: {self._yaml_quote(datetime.now().isoformat())}
+{full_translation_meta_yaml.rstrip()}
 ---
 
 # {title}

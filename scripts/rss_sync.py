@@ -19,8 +19,10 @@ from urllib.parse import urlparse
 
 try:
     from import_quality import clean_import_title, safe_import_stem
+    from translation_policy import full_translate_enabled, load_translation_policy
 except ImportError:
     from .import_quality import clean_import_title, safe_import_stem
+    from .translation_policy import full_translate_enabled, load_translation_policy
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +284,10 @@ class RSSManager:
         self.candidate_dir = self.raw_dir
         self.config_file = self.kb_dir / "rss_feeds.json"
         self.imported_file = self.kb_dir / "rss_imported.json"
-        self.generate_preview = os.environ.get("KB_RSS_GENERATE_PREVIEW", "1").lower() not in {"0", "false", "no", "off"}
+        policy = load_translation_policy(self.kb_dir)
+        policy_preview = full_translate_enabled(policy, "rss_candidate_preview")
+        env_preview = os.environ.get("KB_RSS_GENERATE_PREVIEW")
+        self.generate_preview = policy_preview if env_preview is None else env_preview.lower() not in {"0", "false", "no", "off"}
         
         self.config: Dict[str, FeedSource] = {}
         self.imported: Dict[str, Set[str]] = {}  # source_name -> set of content_hashes

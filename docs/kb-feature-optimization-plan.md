@@ -387,7 +387,7 @@ Task I: Translation Policy and bilingual import controls.
 - [x] Return real translation provider IDs from `/api/translation/models` while preserving online/local kind metadata.
 - [x] Let the single-document retranslation endpoint accept configured provider IDs and keep compatibility for old `online`/`local` requests.
 - [x] Add smoke coverage for Translation Policy config and provider ID shape.
-- [ ] Wire the policy into every import path so URL/file/RSS/WeChat/candidate imports consistently apply bilingual full translation.
+- [x] Wire the policy into every import path so URL/file/RSS/WeChat/candidate imports consistently apply bilingual full translation.
 - [ ] Add a selected-document/batch backfill flow that can generate missing opposite-language full translations without blocking normal imports.
 
 ### Implementation Progress
@@ -396,3 +396,6 @@ Task I: Translation Policy and bilingual import controls.
 - 2026-06-01: `/api/translation/models` now exposes real provider IDs (`deepseek_pro`, `local_gemma4`) plus `kind=online/local`; single-document retranslation accepts those IDs and resolves legacy `online/local` requests for compatibility.
 - 2026-06-01: Retranslation UI now chooses the first available provider, displays provider label/model/key status, and sends the real provider ID to the API.
 - 2026-06-01: `scripts/smoke_webui_audit.py` now asserts Translation Policy availability, default Chinese/English opposite-language settings, real provider IDs, and generated QA cache bypass.
+- 2026-06-02: Added shared `translation_policy.py` helpers and wired policy decisions into direct URL/file imports, candidate formal imports, and RSS candidate preview. URL/file imports now add full `## 🌐 中文翻译` or `## 🌍 English Translation` sections through the `full_translation` flow and record `llm_full_translation` metadata; already-bilingual raw content skips a second full-translation pass.
+- 2026-06-02: `CandidateTranslator` now supports `target_language=zh/en`, preserving `_zh.json` sidecars and adding `_en.json` sidecars for Chinese-source English translations. WeChat Chinese candidates can now be imported with an English full translation when `wechat_candidate_import` is enabled.
+- 2026-06-02: `scripts/smoke_import_quality.py` now covers policy defaults, URL Chinese-source English full translation, RSS preview default-off behavior, candidate tier gating, and WeChat candidate English translation without live LLM calls.

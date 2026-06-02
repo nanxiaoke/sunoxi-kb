@@ -24,6 +24,11 @@ KB_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KB_DIR / "scripts"))
 
 from llm_service import LLMService  # type: ignore
+from translation_policy import (
+    detect_language,
+    section_title_for,
+    source_label_for,
+)
 
 DEFAULT_TERM_GUIDE = """
 翻译规则：
@@ -69,11 +74,12 @@ class CandidateTranslator:
         options.update(policy.options)
         return options
 
-    def translation_path(self, cid: str) -> Path:
-        return self.translation_dir / f"{cid}_zh.json"
+    def translation_path(self, cid: str, target_language: str = "zh") -> Path:
+        suffix = "en" if target_language == "en" else "zh"
+        return self.translation_dir / f"{cid}_{suffix}.json"
 
-    def load_translation(self, cid: str) -> Optional[Dict[str, Any]]:
-        p = self.translation_path(cid)
+    def load_translation(self, cid: str, target_language: str = "zh") -> Optional[Dict[str, Any]]:
+        p = self.translation_path(cid, target_language)
         if not p.exists():
             return None
         try:
@@ -81,8 +87,8 @@ class CandidateTranslator:
         except Exception:
             return None
 
-    def _save_translation(self, cid: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        self.translation_path(cid).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    def _save_translation(self, cid: str, data: Dict[str, Any], target_language: str = "zh") -> Dict[str, Any]:
+        self.translation_path(cid, target_language).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data
 
     def _hash_text(self, text: str) -> str:
@@ -128,14 +134,21 @@ class CandidateTranslator:
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.S).strip()
         return json.loads(cleaned)
 
-    def _translate_text_detailed(self, text: str, *, title: str = "", section: str = "full_translation") -> tuple[str, List[Dict[str, Any]]]:
+    def _translate_text_detailed(self, text: str, *, title: str = "", section: str = "full_translation", target_language: str = "zh") -> tuple[str, List[Dict[str, Any]]]:
         policy = self.llm.config.flow(section)
         cfg = policy.options
         chunk_chars = int(policy.chunk_chars or cfg.get("chunk_chars") or cfg.get("max_chars") or 3500)
+        target_name = "中文" if target_language == "zh" else "English"
+        source_name = "英文" if target_language == "zh" else "中文"
+        system = (
+            "你是专业的 AI/软件工程技术翻译，输出忠实、准确、自然、可检索的中文。"
+            if target_language == "zh"
+            else "You are a professional AI/software engineering translator. Produce faithful, accurate, natural, searchable English."
+        )
         outputs = []
         chunk_meta = []
         for i, chunk in enumerate(self._chunks(text, chunk_chars), 1):
-            prompt = f"""请把下面英文技术内容翻译成中文。严格遵守规则：
+            prompt = f"""请把下面{source_name}技术内容翻译成{target_name}。严格遵守规则：
 
 {self._term_guide()}
 
@@ -145,9 +158,9 @@ class CandidateTranslator:
 待翻译内容：
 {chunk}
 
-请只输出中文译文，不要输出解释。"""
+请只输出{target_name}译文，不要输出解释。"""
             messages = [
-                {"role": "system", "content": "你是专业的 AI/软件工程技术翻译，输出忠实、准确、自然、可检索的中文。"},
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ]
             options = {
@@ -168,8 +181,8 @@ class CandidateTranslator:
             chunk_meta.append(meta)
         return "\n\n".join(o for o in outputs if o), chunk_meta
 
-    def _translate_text(self, text: str, *, title: str = "", section: str = "full_translation") -> str:
-        translated, _chunk_meta = self._translate_text_detailed(text, title=title, section=section)
+    def _translate_text(self, text: str, *, title: str = "", section: str = "full_translation", target_language: str = "zh") -> str:
+        translated, _chunk_meta = self._translate_text_detailed(text, title=title, section=section, target_language=target_language)
         return translated
 
     def translate_preview_candidate(self, item: Dict[str, Any], content: str, *, force: bool = False) -> Dict[str, Any]:
@@ -219,8 +232,8 @@ class CandidateTranslator:
             preview_fallback = preview_result.to_dict()
         except Exception:
             # 兜底：普通翻译，避免候选池完全无中文
-            summary = self._translate_text(body[:max_chars], title=item.get("title", ""), section="candidate_preview")
-            title_zh = self._translate_text(item.get("title", ""), title=item.get("title", ""), section="candidate_preview")
+            summary = self._translate_text(body[:max_chars], title=item.get("title", ""), section="candidate_preview", target_language="zh")
+            title_zh = self._translate_text(item.get("title", ""), title=item.get("title", ""), section="candidate_preview", target_language="zh")
             preview = {
                 "translated_title": title_zh,
                 "translated_summary": summary,
@@ -250,20 +263,30 @@ class CandidateTranslator:
             "target_language": "zh-CN",
             "preview": True,
         })
-        return self._save_translation(cid, result)
+        return self._save_translation(cid, result, "zh")
 
-    def translate_candidate(self, item: Dict[str, Any], content: str, *, force: bool = False) -> Dict[str, Any]:
+    def translate_candidate(self, item: Dict[str, Any], content: str, *, force: bool = False, target_language: str = "zh") -> Dict[str, Any]:
         """完整正文翻译。入库阶段复用 preview，并补齐 translated_content。"""
         cid = item["id"]
         source_hash = self._hash_text(content)
-        existing = self.load_translation(cid)
+        target_language = "en" if target_language == "en" else "zh"
+        existing = self.load_translation(cid, target_language)
         if existing and existing.get("source_hash") == source_hash and existing.get("translated_content") and not force:
             return existing
-        if not existing or existing.get("source_hash") != source_hash:
+        if target_language == "zh" and (not existing or existing.get("source_hash") != source_hash):
             existing = self.translate_preview_candidate(item, content, force=force)
+        elif not existing:
+            existing = {
+                "id": cid,
+                "source_hash": source_hash,
+                "original_title": item.get("title", ""),
+                "original_language": detect_language(content),
+                "target_language": "en",
+                "preview": False,
+            }
 
         body = self._strip_candidate_header(content)
-        zh_content, full_chunks = self._translate_text_detailed(body, title=item.get("title", ""), section="full_translation")
+        translated_content, full_chunks = self._translate_text_detailed(body, title=item.get("title", ""), section="full_translation", target_language=target_language)
         policy = self.llm.config.flow("full_translation")
         first_chunk = full_chunks[0] if full_chunks else {}
         provider_name = first_chunk.get("provider") or (policy.providers[0] if policy.providers else "")
@@ -275,36 +298,44 @@ class CandidateTranslator:
             "model": model_name,
             "full_llm_result": first_chunk,
             "full_llm_chunks": full_chunks,
-            "translated_content": zh_content,
+            "translated_content": translated_content,
             "full": True,
+            "target_language": "zh-CN" if target_language == "zh" else "en",
         })
-        return self._save_translation(cid, existing)
+        return self._save_translation(cid, existing, target_language)
 
     def build_bilingual_markdown(self, item: Dict[str, Any], original_content: str, translation: Dict[str, Any]) -> str:
-        title_zh = translation.get("translated_title") or item.get("title") or "Untitled"
-        title_en = item.get("title") or translation.get("original_title") or "Untitled"
+        target_language = "en" if str(translation.get("target_language") or "").lower().startswith("en") else "zh"
+        source_language = detect_language(original_content)
+        title_main = translation.get("translated_title") if target_language == "zh" else item.get("title")
+        title_main = title_main or item.get("title") or translation.get("original_title") or "Untitled"
+        title_original = item.get("title") or translation.get("original_title") or "Untitled"
         source = item.get("source_name") or item.get("author") or "unknown"
         url = item.get("url") or ""
         publish_time = item.get("publish_time") or ""
         translated_content = translation.get("translated_content") or translation.get("translated_summary") or ""
         topics = translation.get("topics") or []
         key_terms = translation.get("key_terms") or []
-        return f"""# {title_zh}
+        section_title = section_title_for(target_language)
+        original_title_label = "原文标题" if target_language == "zh" else "Original title"
+        source_label = source_label_for(source_language)
+        language_label = "中文译文 + 英文原文" if target_language == "zh" else "English translation + 中文原文"
+        return f"""# {title_main}
 
-> 原文标题: {title_en}
+> {original_title_label}: {title_original}
 > 来源: {source}
 > 发布时间: {publish_time}
 > 链接: {url}
-> 语言: 中文译文 + 英文原文
+> 语言: {language_label}
 > 翻译模型: {translation.get('model') or translation.get('preview_model') or 'unknown'}
 > 中文主题: {', '.join(topics)}
 > 关键术语: {', '.join(key_terms)}
 
-## 中文译文
+## {section_title}
 
 {translated_content}
 
-## 英文原文
+## {source_label}
 
 {original_content.strip()}
 """.strip() + "\n"

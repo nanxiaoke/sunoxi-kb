@@ -23,6 +23,13 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from translation_policy import (
+    detect_language,
+    load_translation_policy,
+    should_translate_import,
+    target_languages_for,
+)
+
 
 class CandidateManager:
     def __init__(self, base_dir: Path):
@@ -34,6 +41,7 @@ class CandidateManager:
         self.state = self._load_state()
         self._rss_source_meta = self._load_rss_source_meta()
         self._wiki_title_index = self._load_wiki_title_index()
+        self.translation_policy = load_translation_policy(self.base_dir)
 
     def _candidate_dirs(self) -> List[Path]:
         """所有候选目录，按优先级排序"""
@@ -108,22 +116,24 @@ class CandidateManager:
         except Exception:
             return {}
 
-    def _translation_import_meta(self, *, cid: str, item: Dict[str, Any], translation_result: Optional[Dict[str, Any]], translate: bool, should_full_translate: bool) -> Dict[str, Any]:
+    def _translation_import_meta(self, *, cid: str, item: Dict[str, Any], translation_result: Optional[Dict[str, Any]], translate: bool, should_full_translate: bool, target_language: str = "zh") -> Dict[str, Any]:
         reason = "disabled"
         if translate:
-            reason = "full_for_A_B" if should_full_translate else "preview_only_or_skipped"
+            reason = "policy_full_translation" if should_full_translate else "preview_only_or_skipped"
         preview_result = (translation_result or {}).get("preview_llm_result") or {}
         full_result = (translation_result or {}).get("full_llm_result") or {}
         full_chunks = (translation_result or {}).get("full_llm_chunks") or []
+        suffix = "en" if target_language == "en" else "zh"
         return {
             "enabled": bool(translation_result),
             "requested": bool(translate),
             "full": bool(translation_result and translation_result.get("translated_content")),
             "decision": "full_translation" if should_full_translate else ("preview_only" if translate else "disabled"),
             "reason": reason,
+            "target_language": target_language,
             "candidate_type": item.get("candidate_type"),
             "quality_tier": item.get("quality_tier"),
-            "path": f"raw/candidate_translations/{cid}_zh.json" if translation_result else None,
+            "path": f"raw/candidate_translations/{cid}_{suffix}.json" if translation_result else None,
             "preview": {
                 "flow": preview_result.get("flow", "candidate_preview"),
                 "provider": (translation_result or {}).get("preview_provider") or preview_result.get("provider"),
@@ -719,13 +729,17 @@ class CandidateManager:
             dest = self.article_dir / f"{src.stem}_{self._file_hash(src)[:8]}{src.suffix}"
 
         translation_result = None
-        full_translate_tiers = {"A", "B"}
-        should_full_translate = (
-            bool(translate)
-            and item.get("candidate_type") in {"rss", "other"}
-            and item.get("quality_tier") in full_translate_tiers
+        source_language = detect_language(item.get("content", ""))
+        target_languages = target_languages_for(self.translation_policy, source_language)
+        target_language = target_languages[0] if target_languages else ("zh" if source_language == "en" else "en")
+        policy_key = "wechat_candidate_import" if item.get("candidate_type") == "wechat" else "candidate_import"
+        should_full_translate = bool(translate) and should_translate_import(
+            self.translation_policy,
+            path_key=policy_key,
+            source_language=source_language,
+            candidate_tier=item.get("quality_tier", ""),
         )
-        if translate and item.get("candidate_type") in {"rss", "other"} and not item.get("translation"):
+        if translate and item.get("candidate_type") in {"rss", "other"} and target_language == "zh" and not item.get("translation"):
             # 即使不做全文翻译，也尽量保证候选有中文预览，供后续追溯。
             sys.path.insert(0, str(self.base_dir / "scripts"))
             from translator import CandidateTranslator  # type: ignore
@@ -735,7 +749,7 @@ class CandidateManager:
             sys.path.insert(0, str(self.base_dir / "scripts"))
             from translator import CandidateTranslator  # type: ignore
             translator = CandidateTranslator(self.base_dir)
-            translation_result = translator.translate_candidate(item, item.get("content", ""), force=False)
+            translation_result = translator.translate_candidate(item, item.get("content", ""), force=False, target_language=target_language)
             bilingual = translator.build_bilingual_markdown(item, item.get("content", ""), translation_result)
             dest.write_text(bilingual, encoding="utf-8")
         else:
@@ -791,6 +805,7 @@ class CandidateManager:
             translation_result=translation_result,
             translate=bool(translate),
             should_full_translate=should_full_translate,
+            target_language=target_language,
         )
         self.state.setdefault("items", {})[cid] = {
             "status": "imported",

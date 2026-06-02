@@ -32,6 +32,8 @@ def main() -> int:
             "列表定位",
             "Translation Policy",
             "Translation Backfill",
+            "Full Translation",
+            "llm_full_translation",
             "bilingual_on_import",
             "mergeTranslationPolicy",
             "loadTranslationBackfillAudit",
@@ -78,12 +80,14 @@ def main() -> int:
         doc_payload = doc_resp.get_json()
         _assert(isinstance(doc_payload.get("meta"), dict), "document preview missing meta")
         _assert("quality" in doc_payload["meta"], "document preview meta missing quality")
+        _assert("llm_full_translation" in doc_payload["meta"], "document preview meta missing full translation metadata")
 
         audit_resp = client.get("/api/llm/audit")
         _assert(audit_resp.status_code == 200, f"audit returned {audit_resp.status_code}")
         audit = audit_resp.get_json()
         _assert("items" in audit, "audit missing items")
         _assert("filtered_total" in audit, "audit missing filtered_total")
+        _assert("full_translation_count" in audit, "audit missing full translation count")
         if audit["items"]:
             first = audit["items"][0]
             _assert("generation_chain" in first, "audit item missing generation_chain")
@@ -98,6 +102,7 @@ def main() -> int:
         _assert(csv_resp.content_type.startswith("text/csv"), f"unexpected csv type {csv_resp.content_type}")
         rows = list(csv.reader(io.StringIO(csv_resp.get_data(as_text=True))))
         _assert(rows and "generation_chain" in rows[0], "audit csv missing generation_chain column")
+        _assert("full_translation_provider" in rows[0], "audit csv missing full translation columns")
 
         backfill_audit = client.get("/api/translation/backfill?limit=3")
         _assert(backfill_audit.status_code == 200, f"translation backfill audit returned {backfill_audit.status_code}")

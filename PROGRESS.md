@@ -1103,3 +1103,7 @@ python3 scripts/processor.py --process-all
   - 显示 scanned/missing/already translated/policy。
   - 展示前 8 个缺失译文文档，并可直接打开预览。
   - 提供 dry-run 预览按钮；不提供直接 apply 按钮，避免误写历史文档。
+- `llm_full_translation` 元数据接入文档预览和 LLM 审计：
+  - 文档预览 API 返回 `meta.llm_full_translation`。
+  - 预览抽屉显示全文翻译 provider/model/target badge。
+  - LLM audit 的 generation chain、summary count 和 CSV 导出纳入 full translation。

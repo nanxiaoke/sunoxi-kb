@@ -1221,6 +1221,7 @@ def get_document(relpath: str):
     meta, _body = _split_frontmatter(content)
     quality = _quality_status_for_content(content)
     llm_meta = meta.get("llm") if isinstance(meta.get("llm"), dict) else {}
+    full_translation_meta = meta.get("llm_full_translation") if isinstance(meta.get("llm_full_translation"), dict) else {}
     retranslation_meta = meta.get("llm_retranslation") if isinstance(meta.get("llm_retranslation"), dict) else {}
     quality_repair_meta = meta.get("quality_repair") if isinstance(meta.get("quality_repair"), dict) else {}
     related_docs = []
@@ -1256,6 +1257,7 @@ def get_document(relpath: str):
             "category": str(meta.get("category") or wiki_file.parent.name),
             "quality": quality,
             "llm": llm_meta,
+            "llm_full_translation": full_translation_meta,
             "llm_retranslation": retranslation_meta,
             "quality_repair": quality_repair_meta,
         },
@@ -1644,6 +1646,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
     by_translation_model: Counter = Counter()
     missing = 0
     fallback_count = 0
+    full_translation_count = 0
     retranslated_count = 0
     translation_legacy_count = 0
     quality_repair_count = 0
@@ -1655,6 +1658,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
         text = path.read_text(encoding="utf-8", errors="ignore")
         meta, _body = _split_frontmatter(text)
         llm = meta.get("llm") if isinstance(meta.get("llm"), dict) else {}
+        full_translation = meta.get("llm_full_translation") if isinstance(meta.get("llm_full_translation"), dict) else {}
         retranslation = meta.get("llm_retranslation") if isinstance(meta.get("llm_retranslation"), dict) else {}
         translation_legacy = meta.get("llm_translation_legacy") if isinstance(meta.get("llm_translation_legacy"), dict) else {}
         quality_repair = meta.get("quality_repair") if isinstance(meta.get("quality_repair"), dict) else {}
@@ -1671,6 +1675,10 @@ def _llm_audit_payload() -> Dict[str, Any]:
             by_status[status] += 1
             if llm.get("fallback_from") or llm.get("fallback_to"):
                 fallback_count += 1
+        if full_translation:
+            full_translation_count += 1
+            by_translation_provider[str(full_translation.get("provider") or "unknown")] += 1
+            by_translation_model[str(full_translation.get("model") or "unknown")] += 1
         if retranslation:
             retranslated_count += 1
         if quality_repair:
@@ -1683,6 +1691,8 @@ def _llm_audit_payload() -> Dict[str, Any]:
         generation_chain = []
         if llm:
             generation_chain.append({"type": "import", "flow": llm.get("flow"), "provider": llm.get("provider"), "model": llm.get("model"), "status": llm.get("status")})
+        if full_translation:
+            generation_chain.append({"type": "full_translation", "flow": full_translation.get("flow"), "provider": full_translation.get("provider"), "model": full_translation.get("model"), "status": full_translation.get("status"), "target_language": full_translation.get("target_language")})
         if retranslation:
             generation_chain.append({"type": "retranslation", "flow": retranslation.get("flow"), "provider": retranslation.get("provider"), "model": retranslation.get("model"), "status": retranslation.get("status")})
         if quality_repair:
@@ -1695,6 +1705,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
             "category": str(meta.get("category") or rel.parent),
             "modified": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
             "llm": llm,
+            "llm_full_translation": full_translation,
             "llm_retranslation": retranslation,
             "llm_translation_legacy": translation_legacy,
             "quality_repair": quality_repair,
@@ -1708,6 +1719,7 @@ def _llm_audit_payload() -> Dict[str, Any]:
         "missing_llm": missing,
         "coverage": round((total - missing) / total, 3) if total else 0,
         "fallback_count": fallback_count,
+        "full_translation_count": full_translation_count,
         "retranslated_count": retranslated_count,
         "translation_legacy_count": translation_legacy_count,
         "quality_repair_count": quality_repair_count,
@@ -1765,9 +1777,10 @@ def _apply_llm_audit_filters(payload: Dict[str, Any], filters: Dict[str, Any]) -
 def _llm_audit_csv_response(payload: Dict[str, Any]) -> Response:
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["path", "title", "category", "modified", "flow", "provider", "model", "status", "fallback_from", "fallback_to", "retranslation_provider", "retranslation_model", "quality_repair_method", "quality_repair_issues", "generation_chain"])
+    writer.writerow(["path", "title", "category", "modified", "flow", "provider", "model", "status", "fallback_from", "fallback_to", "full_translation_provider", "full_translation_model", "full_translation_target", "retranslation_provider", "retranslation_model", "quality_repair_method", "quality_repair_issues", "generation_chain"])
     for item in payload.get("items", []):
         llm = item.get("llm") if isinstance(item.get("llm"), dict) else {}
+        full = item.get("llm_full_translation") if isinstance(item.get("llm_full_translation"), dict) else {}
         retr = item.get("llm_retranslation") if isinstance(item.get("llm_retranslation"), dict) else {}
         repair = item.get("quality_repair") if isinstance(item.get("quality_repair"), dict) else {}
         writer.writerow([
@@ -1781,6 +1794,9 @@ def _llm_audit_csv_response(payload: Dict[str, Any]) -> Response:
             llm.get("status", ""),
             llm.get("fallback_from", ""),
             llm.get("fallback_to", ""),
+            full.get("provider", ""),
+            full.get("model", ""),
+            full.get("target_language", ""),
             retr.get("provider", ""),
             retr.get("model", ""),
             repair.get("method", ""),
@@ -3853,7 +3869,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     </div>
                                     <div class="text-xs opacity-60 mt-2">筛选结果 {{ llmAudit.filtered_total ?? (llmAudit.items || []).length }} / {{ llmAudit.total || 0 }}</div>
                                 </div>
-                                <div class="grid grid-cols-2 md:grid-cols-7 gap-2">
+                                <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditCoverage') }}</div>
                                         <div class="text-xl font-bold">{{ Math.round((llmAudit.coverage || 0) * 100) }}%</div>
@@ -3869,6 +3885,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditFallback') }}</div>
                                         <div class="text-xl font-bold">{{ llmAudit.fallback_count || 0 }}</div>
+                                    </div>
+                                    <div class="rounded-xl border border-base-300 bg-base-100 p-3">
+                                        <div class="text-xs opacity-60">Full Translation</div>
+                                        <div class="text-xl font-bold">{{ llmAudit.full_translation_count || 0 }}</div>
                                     </div>
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="text-xs opacity-60">{{ t('settings.auditRetranslated') }}</div>
@@ -3974,7 +3994,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                     <div class="font-semibold mb-2">{{ t('settings.recentLlmDocs') }}</div>
                                     <div class="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
                                         <table class="table table-xs">
-                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Retrans</th><th>Repair</th><th>Chain</th><th>Action</th></tr></thead>
+                                            <thead><tr><th>Doc</th><th>Flow</th><th>Provider</th><th>Model</th><th>Status</th><th>Full</th><th>Retrans</th><th>Repair</th><th>Chain</th><th>Action</th></tr></thead>
                                             <tbody>
                                                 <tr v-for="item in (llmAudit.items || []).slice(0,10)" :key="item.path" class="hover cursor-pointer" @click="openAuditDoc(item)">
                                                     <td class="max-w-xs truncate">{{ item.title || item.path }}</td>
@@ -3982,6 +4002,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                     <td class="font-mono">{{ item.llm?.provider || '-' }}</td>
                                                     <td class="font-mono">{{ item.llm?.model || '-' }}</td>
                                                     <td>{{ item.llm?.status || '-' }}</td>
+                                                    <td>{{ item.llm_full_translation?.target_language || '-' }}</td>
                                                     <td>{{ item.llm_retranslation?.provider || '-' }}</td>
                                                     <td>{{ item.quality_repair?.method || '-' }}</td>
                                                     <td>
@@ -4328,6 +4349,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             <span class="badge badge-sm badge-outline">{{ previewMeta.category || '未分类' }}</span>
                             <span :class="['badge badge-sm', previewMeta.quality?.ok ? 'badge-success' : 'badge-warning']">{{ previewMeta.quality?.ok ? '质量OK' : '质量待修复' }}</span>
                             <span v-if="previewMeta.llm?.provider" class="badge badge-sm badge-info">{{ previewMeta.llm.flow || 'llm' }} · {{ previewMeta.llm.provider }} / {{ previewMeta.llm.model || '-' }}</span>
+                            <span v-if="previewMeta.llm_full_translation?.provider" class="badge badge-sm badge-primary">全文翻译 · {{ previewMeta.llm_full_translation.target_language || '-' }} · {{ previewMeta.llm_full_translation.provider }} / {{ previewMeta.llm_full_translation.model || '-' }}</span>
                             <span v-if="previewMeta.llm_retranslation?.provider" class="badge badge-sm badge-secondary">重翻译 · {{ previewMeta.llm_retranslation.provider }} / {{ previewMeta.llm_retranslation.model || '-' }}</span>
                             <span v-if="previewMeta.quality_repair?.method" class="badge badge-sm badge-accent">质量修复 · {{ previewMeta.quality_repair.method }}</span>
                         </div>

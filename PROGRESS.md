@@ -1096,3 +1096,10 @@ python3 scripts/processor.py --process-all
 
 ### 状态
 - 已提供历史补译的安全入口，但尚未执行真实历史补译批次。
+
+### 后续补充
+- WebUI LLM 审计面板新增 `Translation Backfill` 维护块：
+  - 自动加载历史缺译文审计统计。
+  - 显示 scanned/missing/already translated/policy。
+  - 展示前 8 个缺失译文文档，并可直接打开预览。
+  - 提供 dry-run 预览按钮；不提供直接 apply 按钮，避免误写历史文档。

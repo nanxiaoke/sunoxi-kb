@@ -31,8 +31,11 @@ def main() -> int:
             "LLM 审计链路",
             "列表定位",
             "Translation Policy",
+            "Translation Backfill",
             "bilingual_on_import",
             "mergeTranslationPolicy",
+            "loadTranslationBackfillAudit",
+            "previewTranslationBackfillDryRun",
         ]:
             _assert(token in html, f"missing WebUI token: {token}")
 

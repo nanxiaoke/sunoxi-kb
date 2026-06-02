@@ -3883,6 +3883,59 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                         <div class="text-xl font-bold">{{ llmAudit.quality_repair_count || 0 }}</div>
                                     </div>
                                 </div>
+                                <div class="rounded-xl border border-base-300 bg-base-100 p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                        <div>
+                                            <div class="font-semibold">Translation Backfill</div>
+                                            <div class="text-xs opacity-60 mt-1">历史文档缺失 opposite-language 全文译文审计；这里只做 dry-run 预览。</div>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <button class="btn btn-xs btn-outline" @click="loadTranslationBackfillAudit" :disabled="loadingTranslationBackfill">
+                                                <span v-if="loadingTranslationBackfill" class="loading loading-spinner loading-xs mr-1"></span>刷新审计
+                                            </button>
+                                            <button class="btn btn-xs btn-primary" @click="previewTranslationBackfillDryRun" :disabled="loadingTranslationBackfill">
+                                                Dry-run 预览
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div v-if="translationBackfillAudit" class="space-y-3">
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                            <div class="rounded-lg border border-base-200 p-2">
+                                                <div class="opacity-60">Scanned</div>
+                                                <div class="text-lg font-bold">{{ translationBackfillAudit.stats?.scanned || 0 }}</div>
+                                            </div>
+                                            <div class="rounded-lg border border-base-200 p-2">
+                                                <div class="opacity-60">Missing</div>
+                                                <div class="text-lg font-bold">{{ translationBackfillAudit.stats?.missing || 0 }}</div>
+                                            </div>
+                                            <div class="rounded-lg border border-base-200 p-2">
+                                                <div class="opacity-60">Translated</div>
+                                                <div class="text-lg font-bold">{{ translationBackfillAudit.stats?.already_translated || 0 }}</div>
+                                            </div>
+                                            <div class="rounded-lg border border-base-200 p-2">
+                                                <div class="opacity-60">Policy</div>
+                                                <div class="font-mono truncate">{{ translationBackfillAudit.policy?.targets || '-' }}</div>
+                                            </div>
+                                        </div>
+                                        <div v-if="translationBackfillDryRun" class="rounded-lg border border-base-200 p-2 text-xs">
+                                            Dry-run planned {{ translationBackfillDryRun.planned || 0 }} / applied {{ translationBackfillDryRun.applied || 0 }}
+                                        </div>
+                                        <div class="overflow-x-auto">
+                                            <table class="table table-xs">
+                                                <thead><tr><th>Doc</th><th>Source</th><th>Missing</th><th>Action</th></tr></thead>
+                                                <tbody>
+                                                    <tr v-for="item in (translationBackfillAudit.items || []).slice(0, 8)" :key="item.path">
+                                                        <td class="max-w-xs truncate">{{ item.path }}</td>
+                                                        <td>{{ item.source_language }}</td>
+                                                        <td>{{ (item.missing_targets || []).join(', ') }}</td>
+                                                        <td><button class="btn btn-xs btn-ghost" @click="previewDoc(item.path)">打开</button></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div v-else class="text-xs opacity-60">尚未加载 backfill 审计。</div>
+                                </div>
                                 <div class="grid md:grid-cols-3 gap-3 text-xs">
                                     <div class="rounded-xl border border-base-300 bg-base-100 p-3">
                                         <div class="font-semibold mb-2">Flow</div>
@@ -4665,6 +4718,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const llmAudit = ref(null);
                 const llmAuditFilters = reactive({ flow: '', provider: '', model: '', status: '', missing: false, fallback: false, retranslated: false });
                 const loadingLlmAudit = ref(false);
+                const translationBackfillAudit = ref(null);
+                const translationBackfillDryRun = ref(null);
+                const loadingTranslationBackfill = ref(false);
                 const loadingLlmConfig = ref(false);
                 const savingLlmConfig = ref(false);
                 const restoringLlmBackup = ref('');
@@ -5094,6 +5150,40 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
                 const exportLlmAudit = (format) => {
                     window.open(llmAuditExportUrl(format), '_blank');
+                };
+
+                const loadTranslationBackfillAudit = async () => {
+                    loadingTranslationBackfill.value = true;
+                    try {
+                        const res = await fetch('/api/translation/backfill?limit=8');
+                        const data = await res.json();
+                        if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        translationBackfillAudit.value = data;
+                    } catch(e) {
+                        showToast(`加载补译审计失败: ${e.message}`, 'error', 7000);
+                    } finally {
+                        loadingTranslationBackfill.value = false;
+                    }
+                };
+
+                const previewTranslationBackfillDryRun = async () => {
+                    loadingTranslationBackfill.value = true;
+                    try {
+                        const res = await fetch('/api/translation/backfill', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ limit: 8, dry_run: true })
+                        });
+                        const data = await res.json();
+                        if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        translationBackfillDryRun.value = data;
+                        translationBackfillAudit.value = data.audit || translationBackfillAudit.value;
+                        showToast(`补译 dry-run：计划 ${data.planned || 0} 篇，已写入 ${data.applied || 0} 篇`, 'info', 5000);
+                    } catch(e) {
+                        showToast(`补译 dry-run 失败: ${e.message}`, 'error', 7000);
+                    } finally {
+                        loadingTranslationBackfill.value = false;
+                    }
                 };
 
                 const restoreLlmBackup = async (name) => {
@@ -6363,7 +6453,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         loadLlmConfig().catch(()=>{});
                         loadLlmBackups().catch(()=>{});
                     }
-                    if(featureEnabled('llm_audit')) loadLlmAudit().catch(()=>{});
+                    if(featureEnabled('llm_audit')) {
+                        loadLlmAudit().catch(()=>{});
+                        loadTranslationBackfillAudit().catch(()=>{});
+                    }
                 });
 
                 return {
@@ -6383,8 +6476,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     translationModels, translationProvider, selectedTranslationModel, isRetranslating, retranslateDoc,
                     llmProviders, llmFlows, llmBackups, llmSecretSetup, llmMode, llmModeOptions, llmModeLabel, llmModeDescription, settingLlmMode,
                     fileImportFlow, fileImportProviderChain,
-                    llmAudit, llmAuditFilters, loadingLlmAudit, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
-                    loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, resetLlmAuditFilters, exportLlmAudit, restoreLlmBackup, testLlmProvider, objectEntries,
+                    llmAudit, llmAuditFilters, loadingLlmAudit, translationBackfillAudit, translationBackfillDryRun, loadingTranslationBackfill, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
+                    loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, resetLlmAuditFilters, exportLlmAudit, loadTranslationBackfillAudit, previewTranslationBackfillDryRun, restoreLlmBackup, testLlmProvider, objectEntries,
                     addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel,
                     availableProvidersForFlow, addProviderToFlow, removeFlowProvider, moveFlowProvider,
                     showUrlInput, fetchUrlInput, isFetchingUrl, fetchUrlError, fetchUrlSuccess, fetchUrl, failedImports, retryFailedImport

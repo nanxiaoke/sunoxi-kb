@@ -1078,3 +1078,21 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 新导入内容已按 Translation Policy 接入双语全文生成路径。
 - 还没有对历史文章执行 backfill/全量重翻译；下一步可做“选中文档/批量补齐缺失 opposite-language 全文译文”的安全任务。
+
+## 2026-06-02 - Task I：历史译文缺口审计与安全补译入口
+
+### 已完成
+- 新增 `scripts/translation_backfill.py`：
+  - 扫描历史 wiki 文档，按 Translation Policy 判断源语言和应补目标语言。
+  - 审计缺失的 `## 🌐 中文翻译` / `## 🌍 English Translation` 全文译文，不调用模型。
+  - 支持 `--path` 选中文档、`--limit` 限制批量规模。
+  - 默认 dry-run；只有传 `--apply` 才会调用 `full_translation` flow 并写回文档。
+  - apply 单次限制最多 20 篇，避免误触发历史全量任务。
+- WebUI 新增后端入口：
+  - `GET /api/translation/backfill?limit=...` 返回缺译文审计结果。
+  - `POST /api/translation/backfill` 默认 `dry_run=true`，返回 planned/applied/audit/results。
+  - 只有显式 `dry_run=false` 才执行真实补译并重建索引。
+- `scripts/smoke_webui_audit.py` 增加补译审计与 dry-run 回归断言，确保 dry-run 不写入、不调用真实补译。
+
+### 状态
+- 已提供历史补译的安全入口，但尚未执行真实历史补译批次。

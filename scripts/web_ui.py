@@ -1891,6 +1891,40 @@ def llm_audit():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/translation/backfill", methods=["GET", "POST"])
+def translation_backfill():
+    """Audit or safely backfill missing opposite-language full translations."""
+    if not _feature_enabled("llm_audit"):
+        return _feature_disabled_response("llm_audit")
+    try:
+        from translation_backfill import audit_backfill, run_backfill
+
+        if request.method == "GET":
+            limit = max(1, min(int(request.args.get("limit") or 50), 200))
+            paths = request.args.getlist("path") or None
+            return jsonify(audit_backfill(KB_DIR, limit=limit, paths=paths))
+
+        data = request.get_json(silent=True) or {}
+        limit = max(1, min(int(data.get("limit") or 5), 20))
+        dry_run = bool(data.get("dry_run", True))
+        provider_name = str(data.get("provider") or "").strip()
+        paths_in = data.get("paths") or ([data.get("path")] if data.get("path") else None)
+        paths = [str(p) for p in paths_in if str(p).strip()] if isinstance(paths_in, list) else None
+        result = run_backfill(
+            KB_DIR,
+            limit=limit,
+            dry_run=dry_run,
+            provider_name=provider_name,
+            paths=paths,
+        )
+        if result.get("applied"):
+            _rebuild_index()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Translation backfill failed: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/llm/providers/<provider_name>/test", methods=["POST"])
 def test_llm_provider(provider_name: str):
     if not _feature_enabled("llm_settings"):

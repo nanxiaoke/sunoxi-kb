@@ -388,7 +388,7 @@ Task I: Translation Policy and bilingual import controls.
 - [x] Let the single-document retranslation endpoint accept configured provider IDs and keep compatibility for old `online`/`local` requests.
 - [x] Add smoke coverage for Translation Policy config and provider ID shape.
 - [x] Wire the policy into every import path so URL/file/RSS/WeChat/candidate imports consistently apply bilingual full translation.
-- [ ] Add a selected-document/batch backfill flow that can generate missing opposite-language full translations without blocking normal imports.
+- [x] Add a selected-document/batch backfill flow that can generate missing opposite-language full translations without blocking normal imports.
 
 ### Implementation Progress
 
@@ -399,3 +399,4 @@ Task I: Translation Policy and bilingual import controls.
 - 2026-06-02: Added shared `translation_policy.py` helpers and wired policy decisions into direct URL/file imports, candidate formal imports, and RSS candidate preview. URL/file imports now add full `## 🌐 中文翻译` or `## 🌍 English Translation` sections through the `full_translation` flow and record `llm_full_translation` metadata; already-bilingual raw content skips a second full-translation pass.
 - 2026-06-02: `CandidateTranslator` now supports `target_language=zh/en`, preserving `_zh.json` sidecars and adding `_en.json` sidecars for Chinese-source English translations. WeChat Chinese candidates can now be imported with an English full translation when `wechat_candidate_import` is enabled.
 - 2026-06-02: `scripts/smoke_import_quality.py` now covers policy defaults, URL Chinese-source English full translation, RSS preview default-off behavior, candidate tier gating, and WeChat candidate English translation without live LLM calls.
+- 2026-06-02: Added `scripts/translation_backfill.py` plus `GET/POST /api/translation/backfill` for historical missing-translation audit and selected/limited backfill. The endpoint defaults to dry-run, caps apply runs, and is covered by `scripts/smoke_webui_audit.py`; no full historical translation batch has been run.

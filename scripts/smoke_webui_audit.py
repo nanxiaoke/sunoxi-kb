@@ -96,6 +96,19 @@ def main() -> int:
         rows = list(csv.reader(io.StringIO(csv_resp.get_data(as_text=True))))
         _assert(rows and "generation_chain" in rows[0], "audit csv missing generation_chain column")
 
+        backfill_audit = client.get("/api/translation/backfill?limit=3")
+        _assert(backfill_audit.status_code == 200, f"translation backfill audit returned {backfill_audit.status_code}")
+        backfill_payload = backfill_audit.get_json()
+        _assert("stats" in backfill_payload, "translation backfill audit missing stats")
+        _assert("items" in backfill_payload, "translation backfill audit missing items")
+
+        backfill_dry = client.post("/api/translation/backfill", json={"limit": 1, "dry_run": True})
+        _assert(backfill_dry.status_code == 200, f"translation backfill dry-run returned {backfill_dry.status_code}")
+        backfill_dry_payload = backfill_dry.get_json()
+        _assert(backfill_dry_payload.get("dry_run") is True, "translation backfill dry-run flag missing")
+        _assert("planned" in backfill_dry_payload, "translation backfill dry-run missing planned count")
+        _assert(backfill_dry_payload.get("applied") == 0, "translation backfill dry-run should not apply changes")
+
         dry_run = client.post("/api/quality/repair", json={"limit": 1, "dry_run": True})
         _assert(dry_run.status_code == 200, f"quality repair dry-run returned {dry_run.status_code}")
         dry_payload = dry_run.get_json()

@@ -509,6 +509,7 @@ def _translation_models() -> List[Dict[str, Any]]:
                 "base_url": p.base_url,
                 "available": p.has_required_secret,
                 "key_env": p.api_key_env or None,
+                "timeout_sec": p.timeout_sec,
                 "online": p.is_online,
                 "flow": flow.name,
             })
@@ -4092,8 +4093,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                 <input v-model="provider.api_key_env" class="input input-sm input-bordered font-mono text-xs" placeholder="DEEPSEEK_API_KEY" />
                                             </label>
                                             <label class="form-control">
-                                                <div class="label py-1"><span class="label-text text-xs">{{ t('settings.timeout') }}</span></div>
+                                                <div class="label py-1"><span class="label-text text-xs">{{ t('settings.callTimeout') }}</span></div>
                                                 <input v-model.number="provider.timeout_sec" type="number" min="1" class="input input-sm input-bordered" />
+                                                <div class="text-[11px] opacity-60 mt-1">{{ t('settings.callTimeoutHint') }}</div>
                                             </label>
                                         </div>
                                     </div>
@@ -4131,7 +4133,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                                                             <span class="badge badge-sm badge-outline">{{ idx + 1 }}</span>
                                                             <div class="min-w-0 flex-1">
                                                                 <div class="font-mono text-xs truncate">{{ providerName }}</div>
-                                                                <div class="text-[11px] opacity-60 truncate">{{ providerLabel(providerName) }}</div>
+                                                                <div class="text-[11px] opacity-60 truncate">{{ providerLabel(providerName) }} · {{ providerTimeout(providerName) }}s</div>
                                                             </div>
                                                             <button class="btn btn-xs btn-ghost" @click="moveFlowProvider(flow, idx, -1)" :disabled="idx === 0">{{ t('settings.up') }}</button>
                                                             <button class="btn btn-xs btn-ghost" @click="moveFlowProvider(flow, idx, 1)" :disabled="idx === flow.providers.length - 1">{{ t('settings.down') }}</button>
@@ -4267,7 +4269,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     <template v-else>
                         <select v-if="!isEditingDoc" v-model="translationProvider" class="select select-sm select-bordered max-w-36" title="Translation provider">
                             <option v-for="m in translationModels" :key="m.provider" :value="m.provider" :disabled="!m.available">
-                                {{ m.label || m.provider_name || m.provider }} · {{ m.kind || (m.online ? 'online' : 'local') }}{{ m.available ? '' : (m.key_env ? ' · missing ' + m.key_env : ' · unavailable') }}
+                                {{ m.label || m.provider_name || m.provider }} · {{ m.kind || (m.online ? 'online' : 'local') }} · {{ m.timeout_sec || 60 }}s{{ m.available ? '' : (m.key_env ? ' · missing ' + m.key_env : ' · unavailable') }}
                             </option>
                         </select>
                         <button class="btn btn-sm btn-outline" v-if="!isEditingDoc" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath">
@@ -4484,7 +4486,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             audit: 'LLM 审计', auditRefresh: '刷新审计', auditCoverage: '覆盖率', auditMissing: '缺少元数据',
                             auditFallback: 'Fallback', auditRetranslated: '已重翻译', auditLegacyTranslation: '历史翻译', recentLlmDocs: '最近模型产物',
                             providers: 'Providers', flows: '业务流策略', label: '显示名', type: '类型', model: '模型', baseUrl: 'Base URL',
-                            keyEnv: 'Key 环境变量', timeout: '超时秒数', secretReady: '密钥已配置', secretMissing: '缺少密钥', noSecret: '无需密钥',
+                            keyEnv: 'Key 环境变量', timeout: '超时秒数', callTimeout: '模型调用超时（秒）', callTimeoutHint: '单次模型 HTTP 请求超时；全文翻译每个分片单独计时。',
+                            secretReady: '密钥已配置', secretMissing: '缺少密钥', noSecret: '无需密钥',
                             intent: '策略意图', providersOrder: 'Provider 顺序', notes: '备注', chunkChars: '分片字符数',
                             fallbackNotice: 'Fallback 记录', allowFallback: '允许 fallback', allowOnline: '允许在线模型', test: '测试',
                             backups: '配置备份', restore: '恢复', addProvider: '新增', deleteProvider: '删除',
@@ -4517,7 +4520,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             audit: 'LLM Audit', auditRefresh: 'Refresh Audit', auditCoverage: 'Coverage', auditMissing: 'Missing metadata',
                             auditFallback: 'Fallback', auditRetranslated: 'Retranslated', auditLegacyTranslation: 'Legacy translation', recentLlmDocs: 'Recent LLM outputs',
                             providers: 'Providers', flows: 'Flow Policies', label: 'Label', type: 'Type', model: 'Model', baseUrl: 'Base URL',
-                            keyEnv: 'Key Env Var', timeout: 'Timeout Sec', secretReady: 'Secret ready', secretMissing: 'Secret missing', noSecret: 'No secret',
+                            keyEnv: 'Key Env Var', timeout: 'Timeout Sec', callTimeout: 'Model call timeout (sec)', callTimeoutHint: 'Timeout for one model HTTP request; full translation applies it per chunk.',
+                            secretReady: 'Secret ready', secretMissing: 'Secret missing', noSecret: 'No secret',
                             intent: 'Intent', providersOrder: 'Provider order', notes: 'Notes', chunkChars: 'Chunk chars',
                             fallbackNotice: 'Fallback notice', allowFallback: 'Allow fallback', allowOnline: 'Allow online', test: 'Test',
                             backups: 'Config Backups', restore: 'Restore', addProvider: 'Add', deleteProvider: 'Delete',
@@ -4783,6 +4787,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     if(!p) return t('settings.missingProvider') || 'Missing provider';
                     return [p.label, p.model].filter(Boolean).join(' · ');
                 };
+                const providerTimeout = (name) => {
+                    const p = llmProviders.value.find(item => item.name === name);
+                    return Number(p?.timeout_sec || 60);
+                };
 
                 const nextProviderName = () => {
                     const used = new Set(llmProviders.value.map(p => p.name));
@@ -4980,8 +4988,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         }
                     } catch(e) {
                         translationModels.value = [
-                            { id: 'deepseek_pro', provider: 'deepseek_pro', provider_name: 'deepseek_pro', kind: 'online', label: 'DeepSeek Pro', model: 'deepseek-v4-pro', available: false, key_env: 'DEEPSEEK_API_KEY' },
-                            { id: 'local_gemma4', provider: 'local_gemma4', provider_name: 'local_gemma4', kind: 'local', label: 'Local Gemma4', model: 'gemma4:e4b', available: true }
+                            { id: 'deepseek_pro', provider: 'deepseek_pro', provider_name: 'deepseek_pro', kind: 'online', label: 'DeepSeek Pro', model: 'deepseek-v4-pro', available: false, key_env: 'DEEPSEEK_API_KEY', timeout_sec: 90 },
+                            { id: 'local_gemma4', provider: 'local_gemma4', provider_name: 'local_gemma4', kind: 'local', label: 'Local Gemma4', model: 'gemma4:e4b', available: true, timeout_sec: 120 }
                         ];
                         translationProvider.value = 'local_gemma4';
                     }
@@ -6500,7 +6508,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                     fileImportFlow, fileImportProviderChain,
                     llmAudit, llmAuditFilters, loadingLlmAudit, translationBackfillAudit, translationBackfillDryRun, loadingTranslationBackfill, loadingLlmConfig, savingLlmConfig, restoringLlmBackup,
                     loadLlmConfig, saveLlmConfig, setLlmMode, loadLlmBackups, loadLlmAudit, resetLlmAuditFilters, exportLlmAudit, loadTranslationBackfillAudit, previewTranslationBackfillDryRun, restoreLlmBackup, testLlmProvider, objectEntries,
-                    addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel,
+                    addLlmProvider, deleteLlmProvider, syncProviderName, providerLabel, providerTimeout,
                     availableProvidersForFlow, addProviderToFlow, removeFlowProvider, moveFlowProvider,
                     showUrlInput, fetchUrlInput, isFetchingUrl, fetchUrlError, fetchUrlSuccess, fetchUrl, failedImports, retryFailedImport
                 };

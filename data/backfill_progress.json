@@ -2,7 +2,7 @@
   "started_at": "2026-06-04T04:11:08.912899+00:00",
   "completed_at": null,
   "total": 23,
-  "current_missing": 15,
+  "current_missing": 9,
   "done": [
     "articles/AI 智能体AI Agent是什么_a2c11069.md",
     "articles/AINews 今日无重大进展_ad79eb52.md",
@@ -24,7 +24,14 @@
     "technologies/从游戏到生物学及更远AlphaGo 10 年的影响_ee1e80c9.md",
     "technologies/智能体可观测性 Agent Observability如何在生产环境中监控和评估 LLM Agent_8f946192.md",
     "technologies/开放模型已跨越一个门槛_35daf98b.md",
-    "technologies/TCP传输性能调优从窗口调优到重传机制_261c2112.md"
+    "technologies/TCP传输性能调优从窗口调优到重传机制_261c2112.md",
+    "articles/分享一个我用了2年的深度研究Prompt半小时帮你搞懂任何陌生领域_59b4b126.md",
+    "articles/大语言模型为什么能像人一样说话和思考_bd4fcc90.md",
+    "articles/衡量个人成长 Measuring personal growth_33329676.md",
+    "articles/这个51K星标的开源神器让任何Agent都能一键切换所有模型_5d7c1e01.md",
+    "articles/这个封装了我3年自媒体经验的AI热点网站今天向所有人免费开放_79e26071.md",
+    "technologies/Anthropic 放出 Agent 终极答案别再写 Agent 框架了未来是 Agent OS 的_abcd456b.md",
+    "technologies/我挖到了Kimi K26Hermes的六个神技巧这下多Agent 24h组队干活真成了_aa61ad55.md"
   ],
   "failed": [],
   "skipped_duplicates": [
@@ -177,6 +184,62 @@
       "source_chars": 3275,
       "chunk_count": 1,
       "elapsed_sec": 59.8
+    },
+    "articles/分享一个我用了2年的深度研究Prompt半小时帮你搞懂任何陌生领域_59b4b126.md": {
+      "path": "articles/分享一个我用了2年的深度研究Prompt半小时帮你搞懂任何陌生领域_59b4b126.md",
+      "title": "分享一个我用了2年的深度研究Prompt，半小时帮你搞懂任何陌生领域。",
+      "source_chars": 6944,
+      "chunk_count": 4,
+      "elapsed_sec": 138.2,
+      "provider": "deepseek_pro"
+    },
+    "articles/大语言模型为什么能像人一样说话和思考_bd4fcc90.md": {
+      "path": "articles/大语言模型为什么能像人一样说话和思考_bd4fcc90.md",
+      "title": "大语言模型为什么能像人一样说话和思考？",
+      "source_chars": 8931,
+      "chunk_count": 4,
+      "elapsed_sec": 254.5,
+      "provider": "deepseek_pro"
+    },
+    "articles/衡量个人成长 Measuring personal growth_33329676.md": {
+      "path": "articles/衡量个人成长 Measuring personal growth_33329676.md",
+      "title": "衡量个人成长 (Measuring personal growth)",
+      "source_chars": 9335,
+      "chunk_count": 3,
+      "elapsed_sec": 159.6,
+      "provider": "deepseek_pro"
+    },
+    "articles/这个51K星标的开源神器让任何Agent都能一键切换所有模型_5d7c1e01.md": {
+      "path": "articles/这个51K星标的开源神器让任何Agent都能一键切换所有模型_5d7c1e01.md",
+      "title": "这个51K星标的开源神器，让任何Agent都能一键切换所有模型。",
+      "source_chars": 5158,
+      "chunk_count": 3,
+      "elapsed_sec": 183.7,
+      "provider": "deepseek_pro"
+    },
+    "articles/这个封装了我3年自媒体经验的AI热点网站今天向所有人免费开放_79e26071.md": {
+      "path": "articles/这个封装了我3年自媒体经验的AI热点网站今天向所有人免费开放_79e26071.md",
+      "title": "这个封装了我3年自媒体经验的AI热点网站，今天向所有人免费开放。",
+      "source_chars": 5326,
+      "chunk_count": 3,
+      "elapsed_sec": 161.7,
+      "provider": "deepseek_pro"
+    },
+    "technologies/Anthropic 放出 Agent 终极答案别再写 Agent 框架了未来是 Agent OS 的_abcd456b.md": {
+      "path": "technologies/Anthropic 放出 Agent 终极答案别再写 Agent 框架了未来是 Agent OS 的_abcd456b.md",
+      "title": "Anthropic 放出 Agent 终极答案：别再写 Agent 框架了，未来是 Agent OS 的时代",
+      "source_chars": 3819,
+      "chunk_count": 3,
+      "elapsed_sec": 91.8,
+      "provider": "deepseek_pro"
+    },
+    "technologies/我挖到了Kimi K26Hermes的六个神技巧这下多Agent 24h组队干活真成了_aa61ad55.md": {
+      "path": "technologies/我挖到了Kimi K26Hermes的六个神技巧这下多Agent 24h组队干活真成了_aa61ad55.md",
+      "title": "我挖到了Kimi K2.6+Hermes的六个神技巧，这下多Agent 24h组队干活真成了",
+      "source_chars": 4825,
+      "chunk_count": 3,
+      "elapsed_sec": 157.0,
+      "provider": "deepseek_pro"
     }
   }
 }

@@ -1108,7 +1108,7 @@ python3 scripts/processor.py --process-all
   - 预览抽屉显示全文翻译 provider/model/target badge。
   - LLM audit 的 generation chain、summary count 和 CSV 导出纳入 full translation。
 
-## 2026-06-04 - Translation Backfill 执行（已暂停）
+## 2026-06-04 - Translation Backfill 执行（进行中）
 
 ### 背景
 6/2 审计发现 157 篇文档中 37 篇缺 opposite-language 译文（zh→en），去重后 33 篇需翻译。
@@ -1122,27 +1122,35 @@ python3 scripts/processor.py --process-all
 | 指标 | 值 |
 |------|-----|
 | 总目标（去重后） | 23 篇 |
-| 已完成 | **21 篇** |
+| 已完成 | **28 篇** |
 | 失败 | 0 篇 |
 | 重复跳过 | 2 篇 |
 
-**分布：** articles/ 14 篇 + technologies/ 7 篇
+**分布：** articles/ 19 篇 + technologies/ 9 篇
 
-**耗时分析：** 小文档（<1Kch）20-55s/篇，中文档（3-9Kch）60-120s/篇，大文档（44Kch）659s
+**耗时分析：** 小文档（<1Kch）20-55s/篇，中等文档（3-9Kch）91.8-254.5s/篇，大文档（44Kch）659s
 
 ### 瓶颈
 - DeepSeek V4 Pro API 响应慢，单篇最长 11 分钟
 - 进程多次 timeout 后按用户要求暂停
 
 ### 进度文件
-- `~/karpathy-kb/data/backfill_progress.json` — 21 篇完成记录 + 耗时元数据
+- `~/karpathy-kb/data/backfill_progress.json` — 28 篇完成记录 + 耗时元数据
 - 续跑：`cd ~/karpathy-kb && export $(grep -v '^#' /home/sunoxi/.config/karpathy-kb/llm.env | xargs) && PYTHONUNBUFFERED=1 timeout 600 python3 scripts/backfill_all_37.py`
 - 分阶段续跑（推荐先跑 7 篇中等文档）：`PYTHONUNBUFFERED=1 timeout 900 python3 scripts/backfill_all_37.py --max-chars 10000`
 - 只查看计划不调用模型：`python3 scripts/backfill_all_37.py --status-only --max-chars 10000`
 
-### 剩余 15 篇
-- 🟡 7 篇（3.8K-9.3Kch）
-- 🔴 8 篇（11K-88Kch）
+### 2026-06-04 中等文档续跑结果
+- 执行命令：`PYTHONUNBUFFERED=1 timeout 900 python3 scripts/backfill_all_37.py --max-chars 10000`
+  - 第一轮因 900s timeout 截断，但已成功写入 4 篇
+- 继续执行：`PYTHONUNBUFFERED=1 timeout 1200 python3 scripts/backfill_all_37.py --max-chars 10000`
+  - 第二轮成功写入剩余 3 篇
+- 本次新增：7 篇，44,338 字符，25 chunks，总翻译耗时 1,146.5s
+- 当前缺译文审计：9 条缺失记录，其中 8 篇为唯一大文档，1 条为已跳过的重复归档
+
+### 剩余任务
+- 🔴 8 篇大文档（11K-88Kch）仍待处理
+- `python3 scripts/backfill_all_37.py --status-only` 可查看剩余大文档计划
 
 ### 期间问题：WebUI 重翻译按钮灰显（已解决）
 用户反馈导入文章后点预览，「重新翻译」按钮灰色（`:disabled="isRetranslating || !previewDocPath || isEditingDoc"`）。

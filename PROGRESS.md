@@ -1193,3 +1193,36 @@ python3 scripts/processor.py --process-all
 - 请求体包含：`provider=local_gemma4`、`model=gemma4:e4b`、`dry_run=true`
 - 前端进入确认弹窗流程；验证时拦截 `/translate` 返回 mock dry-run 结果并取消确认，因此没有写入文档
 - 截图：`/tmp/karpathy-retranslate-validation.png`
+
+## 2026-06-04 - WebUI 重构启动：模板解耦与重翻译状态收敛
+
+### 背景
+用户指出 WebUI 当前由 `scripts/web_ui.py` 单文件维护，文件已膨胀到 6K+ 行，后续维护困难；此前「重新翻译」按钮灰显问题也暴露了前端状态变量散落、模板直接拼条件的问题。
+
+### 本阶段完成
+- 将内嵌在 `scripts/web_ui.py` 的 Vue/Tailwind 页面模板提取到 `scripts/webui/templates/index.html`。
+- `scripts/web_ui.py` 保留原 Flask app、API 路由、CLI 参数和启动入口，继续支持：
+  - `python3 scripts/web_ui.py --host 0.0.0.0 --port 5080`
+  - systemd `karpathy-kb.service`
+  - Docker/packaging 里已有的一条命令启动方式
+- 新增 `scripts/webui/README.md`，记录 WebUI 目录结构、兼容入口和后续重构方向。
+- 重翻译按钮状态从模板里的多条件表达式收敛为单一 `retranslateAction` computed/view model。
+- `retranslateDoc()` 也改为读取 `retranslateAction`，避免 UI 状态和业务 guard 分叉。
+- `scripts/smoke_webui_audit.py` 更新为同时检查 backend 源码和独立 frontend 模板，防止模板拆分后漏检 UI 依赖变量。
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 返回 200，页面包含 `retranslateAction`。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok。
+
+### 当前状态
+- `scripts/web_ui.py` 从 6749 行降到约 2942 行。
+- 前端模板独立为 `scripts/webui/templates/index.html`，约 3812 行。
+- 一条命令启动能力保持不变。
+
+### 下一阶段建议
+- 按路由域拆分 Python 后端：documents/search/llm/candidates/maintenance/config。
+- 将 WebUI 中“坏链 / 补链建议 / 推荐展示 / 低置信”做成清晰的知识链接质量面板，避免把补链建议误读为坏链。
+- 继续把复杂 UI 操作整理成单一 action/view model，减少模板内联条件。

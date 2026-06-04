@@ -15,6 +15,17 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from web_ui import app  # noqa: E402
 
 
+WEB_UI_SOURCE = ROOT / "scripts" / "web_ui.py"
+WEB_UI_TEMPLATE = ROOT / "scripts" / "webui" / "templates" / "index.html"
+
+
+def _webui_sources() -> str:
+    parts = [WEB_UI_SOURCE.read_text(encoding="utf-8")]
+    if WEB_UI_TEMPLATE.exists():
+        parts.append(WEB_UI_TEMPLATE.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -42,7 +53,7 @@ def main() -> int:
         ]:
             _assert(token in html, f"missing WebUI token: {token}")
 
-        web_ui_source = (ROOT / "scripts" / "web_ui.py").read_text(encoding="utf-8")
+        web_ui_source = _webui_sources()
         _assert(
             'use_cache=(qa_mode == "extractive")' in web_ui_source,
             "LLM QA answers should bypass persistent cache",
@@ -119,7 +130,7 @@ def main() -> int:
         _assert(backfill_dry_payload.get("applied") == 0, "translation backfill dry-run should not apply changes")
 
         # Retranslation source/target language detection
-        webui_source = (ROOT / "scripts" / "web_ui.py").read_text(encoding="utf-8")
+        webui_source = _webui_sources()
         for token in [
             "_detect_wiki_source_language",
             "_resolve_retranslation_target",
@@ -130,6 +141,7 @@ def main() -> int:
             "🌍 English Translation",
             "🌐 中文翻译",
             "retranslateButtonTitle",
+            "retranslateAction",
             "isEditingDoc",
         ]:
             _assert(token in webui_source, f"retranslation source missing token: {token}")
@@ -138,6 +150,7 @@ def main() -> int:
         setup_return = setup_match.group("body")
         for token in [
             "previewDocPath",
+            "retranslateAction",
             "retranslateButtonTitle",
         ]:
             _assert(token in setup_return, f"Vue setup return missing token used by retranslation UI: {token}")

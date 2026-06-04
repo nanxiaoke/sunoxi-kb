@@ -1679,3 +1679,33 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 聊天 action 已进入 `chat.js`。
 - `app.js` 中剩余最大独立块主要是图谱渲染、文档预览基础逻辑和少量全局 UI glue。
+
+## 2026-06-04 - WebUI 重构第十六阶段：文档预览模块化
+
+### 目标
+继续清理 `app.js`，把预览抽屉相关操作迁移到独立模块。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/preview.js`：
+  - `KBPreview.closePreview`
+  - `KBPreview.previewDoc`
+  - `KBPreview.focusDocInList`
+  - `KBPreview.openAuditDoc`
+  - `KBPreview.openDocAudit`
+  - `KBPreview.saveDocContent`
+- 预览抽屉状态复位、文档加载、列表定位、审计打开和文档内容保存迁移到 `preview.js`。
+- `app.js` 中预览相关函数改为薄 wrapper。
+- 模板新增 `/webui/static/js/modules/preview.js` 加载，继续保持无构建链。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/preview.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/preview.js` 均 200。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `preview.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 聊天和文档预览基础逻辑都已拆出。
+- `app.js` 中剩余最大独立块主要是图谱渲染和少量全局 UI glue。

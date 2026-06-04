@@ -380,94 +380,29 @@ createApp({
         const providerLabel = (name) => KBSettings.providerLabel(settingsContext, name);
         const providerTimeout = (name) => KBSettings.providerTimeout(settingsContext, name);
 
+        let previewContext = null;
         const closePreview = () => {
-            previewOpen.value = false;
-            isEditingDoc.value = false;
-            previewRelated.value = [];
-            previewAssociation.value = null;
-            previewMeta.value = {};
-            previewAuditItem.value = null;
-            previewMode.value = 'document';
-            candidateWorkbenchItem.value = null;
+            KBPreview.closePreview(previewContext);
         };
 
         const previewDoc = async (path, options = {}) => {
-            previewDocPath.value = path;
-            previewDocName.value = path.split('/').pop();
-            previewOpen.value = true;
-            previewLoading.value = true;
-            isEditingDoc.value = false;
-            previewContent.value = '';
-            previewRelated.value = [];
-            previewAssociation.value = null;
-            previewMeta.value = {};
-            previewAuditItem.value = options.auditItem || null;
-            previewMode.value = 'document';
-            candidateWorkbenchItem.value = null;
-            
-            try {
-                const res = await fetch(`/api/documents/${encodeURIComponent(path)}`);
-                if(res.ok) {
-                    const data = await res.json();
-                    previewContent.value = data.content || '';
-                    previewRelated.value = data.related || [];
-                    previewAssociation.value = data.association || null;
-                    previewMeta.value = data.meta || {};
-                } else {
-                    previewContent.value = "无法加载文档内容。";
-                }
-            } catch(e) {
-                showToast("加载失败", "error");
-            } finally {
-                previewLoading.value = false;
-            }
+            await KBPreview.previewDoc(previewContext, path, options);
         };
 
         const focusDocInList = async (path) => {
-            if(!path) return;
-            activeTab.value = 'docs';
-            const parts = path.split('/');
-            selectedDocFolder.value = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
-            docSearchText.value = parts[parts.length - 1] || path;
-            docsPage.value = 1;
-            await nextTick();
-            previewDoc(path);
+            await KBPreview.focusDocInList(previewContext, path);
         };
 
         const openAuditDoc = async (item) => {
-            if(!item?.path) return;
-            await previewDoc(item.path, { auditItem: item });
+            await KBPreview.openAuditDoc(previewContext, item);
         };
 
         const openDocAudit = async (path) => {
-            if(!path) return;
-            activeTab.value = 'settings';
-            if(!llmAudit.value && !loadingLlmAudit.value) await loadLlmAudit();
-            const item = (llmAudit.value?.items || []).find(x => x.path === path);
-            if(item) {
-                await previewDoc(path, { auditItem: item });
-            } else {
-                await previewDoc(path);
-                showToast('已打开文档；当前审计筛选中未找到对应条目', 'info', 5000);
-            }
+            await KBPreview.openDocAudit(previewContext, path);
         };
 
         const saveDocContent = async () => {
-            try {
-                const res = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: previewContent.value })
-                });
-                if(res.ok) {
-                    showToast("保存成功", "success");
-                    isEditingDoc.value = false;
-                } else {
-                    throw new Error("保存失败");
-                }
-            } catch(e) {
-                showToast("保存出错: " + e.message, "error");
-            }
+            await KBPreview.saveDocContent(previewContext);
         };
 
         const loadTranslationModels = async () => {
@@ -659,6 +594,29 @@ createApp({
         const qualityOnly = ref(false);
         const issueLabel = (issue) => KBDocuments.issueLabel(issue);
         const issueText = (issues) => KBDocuments.issueText(issues);
+        previewContext = {
+            activeTab,
+            candidateWorkbenchItem,
+            docSearchText,
+            docsPage,
+            isEditingDoc,
+            llmAudit,
+            loadingLlmAudit,
+            previewAssociation,
+            previewAuditItem,
+            previewContent,
+            previewDocName,
+            previewDocPath,
+            previewLoading,
+            previewMeta,
+            previewMode,
+            previewOpen,
+            previewRelated,
+            selectedDocFolder,
+            nextTick,
+            showToast,
+            loadLlmAudit: (...args) => loadLlmAudit(...args)
+        };
         const maintenanceContext = {
             activeTab,
             associationReport,

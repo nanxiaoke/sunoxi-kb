@@ -744,13 +744,13 @@ createApp({
         const savingWechatSource = ref(false);
         const discoveringWechat = ref(false);
         const wechatDiscoveryResult = ref(null);
-        const newWechatSource = ref({ name: '', sample_url: '', tags: '', priority: 'normal' });
+        const newWechatSource = ref(KBSources.defaultWechatSource());
         const discoverForm = ref({ source: '', since: '', limit: 10, url: '' });
         const rssFeeds = ref([]);
         const loadingRssFeeds = ref(false);
         const syncingRss = ref(false);
         const rssSyncResult = ref(null);
-        const rssNewForm = ref({ url: '', name: '', category: 'articles', priority: 'medium', tags: '', notes: '', language: 'en', interval_minutes: 360, max_articles: 10, enabled: true });
+        const rssNewForm = ref(KBSources.defaultRssForm());
         const dragOver = ref(false);
         const stats = ref({});
         const showUrlInput = ref(false);
@@ -794,6 +794,22 @@ createApp({
             loadingDocs,
             stats,
             showToast
+        };
+        const sourcesContext = {
+            discoveringWechat,
+            discoverForm,
+            loadingRssFeeds,
+            loadingWechatSources,
+            newWechatSource,
+            rssFeeds,
+            rssNewForm,
+            rssSyncResult,
+            savingWechatSource,
+            syncingRss,
+            wechatDiscoveryResult,
+            wechatSources,
+            showToast,
+            loadCandidates: (...args) => loadCandidates(...args)
         };
 
         const loadDocs = async () => {
@@ -864,120 +880,35 @@ createApp({
         };
 
         const loadRssFeeds = async () => {
-            loadingRssFeeds.value = true;
-            try {
-                const res = await fetch('/api/rss/feeds');
-                const data = await res.json();
-                rssFeeds.value = data.feeds || [];
-            } catch(e) { showToast('加载RSS订阅失败', 'error'); }
-            finally { loadingRssFeeds.value = false; }
+            await KBSources.loadRssFeeds(sourcesContext);
         };
 
         const saveRssFeed = async () => {
-            const payload = { ...rssNewForm.value };
-            if(typeof payload.tags === 'string') payload.tags = payload.tags.split(',').map(t=>t.trim()).filter(Boolean);
-            try {
-                const res = await fetch('/api/rss/feeds', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if(!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
-                showToast('RSS订阅已保存', 'success');
-                rssNewForm.value = { url: '', name: '', category: 'articles', priority: 'medium', tags: '', notes: '', language: 'en', interval_minutes: 360, max_articles: 10, enabled: true };
-                await loadRssFeeds();
-            } catch(e) { showToast(`保存失败: ${e.message}`, 'error'); }
+            await KBSources.saveRssFeed(sourcesContext);
         };
 
         const deleteRssFeed = async (key) => {
-            if(!confirm(`确认删除订阅源 "${key}"？`)) return;
-            try {
-                const res = await fetch(`/api/rss/feeds/${encodeURIComponent(key)}`, { method: 'DELETE' });
-                if(!res.ok) throw new Error(`HTTP ${res.status}`);
-                showToast('已删除', 'success');
-                await loadRssFeeds();
-            } catch(e) { showToast(`删除失败: ${e.message}`, 'error'); }
+            await KBSources.deleteRssFeed(sourcesContext, key);
         };
 
         const toggleRssFeed = async (key) => {
-            try {
-                const feed = rssFeeds.value.find(f => f.key === key);
-                if(!feed) return;
-                const res = await fetch(`/api/rss/feeds/${encodeURIComponent(key)}`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: !feed.enabled })
-                });
-                if(!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
-                feed.enabled = !feed.enabled;
-                showToast(`已${feed.enabled ? '启用' : '禁用'} ${feed.name || key}`, 'success');
-            } catch(e) { showToast(`操作失败: ${e.message}`, 'error'); }
+            await KBSources.toggleRssFeed(sourcesContext, key);
         };
 
         const syncRss = async (feedKey=null) => {
-            if(typeof feedKey !== 'string') feedKey = null;
-            syncingRss.value = true;
-            rssSyncResult.value = null;
-            try {
-                const payload = { limit: 5 };
-                if(feedKey) payload.feed_key = feedKey;
-                const res = await fetch('/api/rss/sync', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                rssSyncResult.value = data;
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(`RSS同步完成: ${data.new} 新, ${data.skipped} 跳过, ${data.errors} 错误`, data.new > 0 ? 'success' : 'info', 6000);
-                await loadRssFeeds();
-                await loadCandidates();
-            } catch(e) { showToast(`RSS同步失败: ${e.message}`, 'error', 8000); }
-            finally { syncingRss.value = false; }
+            await KBSources.syncRss(sourcesContext, feedKey);
         };
 
         const loadWechatSources = async () => {
-            loadingWechatSources.value = true;
-            try {
-                const res = await fetch('/api/wechat/sources');
-                const data = await res.json();
-                wechatSources.value = data.sources || [];
-            } catch(e) { showToast('加载公众号订阅失败', 'error'); }
-            finally { loadingWechatSources.value = false; }
+            await KBSources.loadWechatSources(sourcesContext);
         };
 
         const saveWechatSource = async () => {
-            savingWechatSource.value = true;
-            try {
-                const res = await fetch('/api/wechat/sources', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newWechatSource.value)
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast('公众号订阅已保存', 'success');
-                newWechatSource.value = { name: '', sample_url: '', tags: '', priority: 'normal' };
-                await loadWechatSources();
-            } catch(e) { showToast(`保存失败: ${e.message}`, 'error'); }
-            finally { savingWechatSource.value = false; }
+            await KBSources.saveWechatSource(sourcesContext);
         };
 
         const discoverWechat = async (sourceName=null) => {
-            if(sourceName && typeof sourceName !== 'string') sourceName = null;
-            discoveringWechat.value = true;
-            wechatDiscoveryResult.value = null;
-            try {
-                const payload = { ...discoverForm.value };
-                if(sourceName) payload.source = sourceName;
-                const res = await fetch('/api/wechat/discover', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                wechatDiscoveryResult.value = data;
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast('搜索发现完成，候选已进入候选池', 'success', 6000);
-                await loadWechatSources();
-                await loadCandidates();
-            } catch(e) { showToast(`发现失败: ${e.message}`, 'error', 8000); }
-            finally { discoveringWechat.value = false; }
+            await KBSources.discoverWechat(sourcesContext, sourceName);
         };
 
         const loadCandidates = async () => {

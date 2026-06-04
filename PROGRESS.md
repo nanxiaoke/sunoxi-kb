@@ -1554,3 +1554,37 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 候选池 action、预览、导入后入口和分组 view model 已基本完成模块化。
 - `app.js` 中剩余最大独立块主要是图谱渲染，以及 RSS/公众号源管理。
+
+## 2026-06-04 - WebUI 重构第十二阶段：RSS/公众号源管理模块化
+
+### 目标
+继续减少 `app.js` 中的业务 action，把 RSS 订阅和公众号订阅/发现相关 API 逻辑抽成独立前端模块。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/sources.js`：
+  - `KBSources.loadRssFeeds`
+  - `KBSources.saveRssFeed`
+  - `KBSources.deleteRssFeed`
+  - `KBSources.toggleRssFeed`
+  - `KBSources.syncRss`
+  - `KBSources.loadWechatSources`
+  - `KBSources.saveWechatSource`
+  - `KBSources.discoverWechat`
+- 新增 RSS/公众号默认表单 factory：
+  - `KBSources.defaultRssForm`
+  - `KBSources.defaultWechatSource`
+- `app.js` 中 RSS/公众号相关函数改为调用 `KBSources`，只保留状态定义和薄 wrapper。
+- 模板新增 `/webui/static/js/modules/sources.js` 加载，仍保持无构建链和一条命令启动。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/sources.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/sources.js` 均 200。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `sources.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 设置、维护、文档、候选池、RSS/公众号源管理已进入独立前端模块。
+- `app.js` 中剩余最大独立块主要是图谱渲染、文档列表 view model、LLM provider/flow 编辑辅助函数、聊天/预览基础逻辑。

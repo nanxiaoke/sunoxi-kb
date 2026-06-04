@@ -1226,3 +1226,47 @@ python3 scripts/processor.py --process-all
 - 按路由域拆分 Python 后端：documents/search/llm/candidates/maintenance/config。
 - 将 WebUI 中“坏链 / 补链建议 / 推荐展示 / 低置信”做成清晰的知识链接质量面板，避免把补链建议误读为坏链。
 - 继续把复杂 UI 操作整理成单一 action/view model，减少模板内联条件。
+
+## 2026-06-04 - WebUI 重构第二阶段：无构建 JS 拆分与链接质量面板
+
+### 目标
+继续沿“正式前端工程化”的低风险路线推进，但暂不引入 npm/Vite 运行时依赖，确保纯 Windows 环境仍可一条命令启动。
+
+### 本阶段完成
+- 将 `scripts/webui/templates/index.html` 底部的 Vue 应用逻辑提取到 `scripts/webui/static/js/app.js`。
+- `index.html` 只保留页面结构、样式和 `<script src="/webui/static/js/app.js"></script>`。
+- `scripts/web_ui.py` 新增 `/webui/static/<path:filename>` 静态资源路由，用于服务拆出的前端 JS。
+- 新增 `linkQualityHealth` computed/view model，集中表达链接质量状态：
+  - `brokenLinks`
+  - `orphans`
+  - `weakDocs`
+  - `hardIssues`
+  - `optimizationQueue`
+  - `autoLinkCandidates`
+  - `recommendationOnlyLinks`
+  - `lowConfidenceLinks`
+  - `missingCrossLinks`
+- WebUI 知识关联报告改成两层口径：
+  - **健康检查**：坏链、孤立页、弱关联，是维护后的硬指标。
+  - **补链优化队列**：可自动补、推荐展示、低置信、潜在缺失，是待审核优化项，不等同坏链。
+- `scripts/smoke_webui_audit.py` 更新为同时检查：
+  - `scripts/web_ui.py`
+  - `scripts/webui/templates/index.html`
+  - `scripts/webui/static/js/app.js`
+
+### 验证
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 包含外部 `app.js`，`/webui/static/js/app.js` 返回 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，`/webui/static/js/app.js` 返回 `text/javascript`。
+
+### 当前状态
+- `scripts/webui/templates/index.html` 从约 3841 行降到约 1710 行。
+- `scripts/webui/static/js/app.js` 约 2173 行。
+- 一条命令启动能力保持不变。
+
+### 下一阶段建议
+- 继续把 `app.js` 按功能拆成无构建模块：`api.js`、`actions/retranslate.js`、`quality/linkQuality.js`、`views/docs.js`。
+- 待边界稳定后，再迁移到 Vite/Vue SFC + TypeScript，并由 Flask serve build 后的 dist。

@@ -17,12 +17,14 @@ from web_ui import app  # noqa: E402
 
 WEB_UI_SOURCE = ROOT / "scripts" / "web_ui.py"
 WEB_UI_TEMPLATE = ROOT / "scripts" / "webui" / "templates" / "index.html"
+WEB_UI_APP_JS = ROOT / "scripts" / "webui" / "static" / "js" / "app.js"
 
 
 def _webui_sources() -> str:
     parts = [WEB_UI_SOURCE.read_text(encoding="utf-8")]
-    if WEB_UI_TEMPLATE.exists():
-        parts.append(WEB_UI_TEMPLATE.read_text(encoding="utf-8"))
+    for source in (WEB_UI_TEMPLATE, WEB_UI_APP_JS):
+        if source.exists():
+            parts.append(source.read_text(encoding="utf-8"))
     return "\n".join(parts)
 
 
@@ -36,6 +38,8 @@ def main() -> int:
         home = client.get("/")
         _assert(home.status_code == 200, f"home returned {home.status_code}")
         html = home.get_data(as_text=True)
+        _assert("/webui/static/js/app.js" in html, "home should load external WebUI app.js")
+        web_ui_source = _webui_sources()
         for token in [
             "focusDocInList",
             "openAuditDoc",
@@ -50,10 +54,11 @@ def main() -> int:
             "mergeTranslationPolicy",
             "loadTranslationBackfillAudit",
             "previewTranslationBackfillDryRun",
+            "linkQualityHealth",
+            "补链优化队列",
         ]:
-            _assert(token in html, f"missing WebUI token: {token}")
+            _assert(token in web_ui_source, f"missing WebUI token: {token}")
 
-        web_ui_source = _webui_sources()
         _assert(
             'use_cache=(qa_mode == "extractive")' in web_ui_source,
             "LLM QA answers should bypass persistent cache",

@@ -2878,6 +2878,7 @@ def run_maintenance():
 # ═══════════════════════════════════════════════════════════════════
 
 WEBUI_TEMPLATE_DIR = Path(__file__).resolve().parent / "webui" / "templates"
+WEBUI_STATIC_DIR = Path(__file__).resolve().parent / "webui" / "static"
 INDEX_TEMPLATE = WEBUI_TEMPLATE_DIR / "index.html"
 
 
@@ -2894,6 +2895,11 @@ def index():
 @app.route("/static/<path:filename>")
 def static_files(filename: str):
     return send_file(str(KB_DIR / "static" / filename))
+
+
+@app.route("/webui/static/<path:filename>")
+def webui_static_files(filename: str):
+    return send_from_directory(WEBUI_STATIC_DIR, filename)
 
 
 

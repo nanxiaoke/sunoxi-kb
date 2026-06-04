@@ -375,113 +375,41 @@ createApp({
             llmModeLabel,
             normalizeLlmProviders,
             normalizeLlmFlows,
+            t,
             showToast,
             loadTranslationModels: (...args) => loadTranslationModels(...args)
         };
 
-        const providerLabel = (name) => {
-            const p = llmProviders.value.find(item => item.name === name);
-            if(!p) return t('settings.missingProvider') || 'Missing provider';
-            return [p.label, p.model].filter(Boolean).join(' · ');
-        };
-        const providerTimeout = (name) => {
-            const p = llmProviders.value.find(item => item.name === name);
-            return Number(p?.timeout_sec || 60);
-        };
-
-        const nextProviderName = () => {
-            const used = new Set(llmProviders.value.map(p => p.name));
-            let idx = 1;
-            let name = 'new_provider';
-            while(used.has(name)) {
-                idx += 1;
-                name = `new_provider_${idx}`;
-            }
-            return name;
-        };
-
         const addLlmProvider = () => {
-            const name = nextProviderName();
-            llmProviders.value.push({
-                name,
-                _original_name: name,
-                type: 'ollama',
-                label: 'New Provider',
-                model: 'gemma4:e4b',
-                base_url: 'http://127.0.0.1:11434',
-                api_key_env: '',
-                timeout_sec: 60,
-                options: {},
-                online: false,
-                secret_configured: false
-            });
-            showToast(`已新增 Provider：${name}`, 'info', 4000);
+            KBSettings.addLlmProvider(settingsContext);
         };
 
         const syncProviderName = (provider) => {
-            const oldName = provider._original_name || '';
-            const newName = String(provider.name || '').trim();
-            if(!/^[A-Za-z0-9_-]+$/.test(newName)) {
-                provider.name = oldName;
-                showToast('Provider ID 只能包含字母、数字、下划线和短横线', 'error', 6000);
-                return;
-            }
-            const duplicate = llmProviders.value.some(p => p !== provider && p.name === newName);
-            if(duplicate) {
-                provider.name = oldName;
-                showToast(`Provider ID 已存在：${newName}`, 'error', 6000);
-                return;
-            }
-            if(oldName && oldName !== newName) {
-                llmFlows.value.forEach(flow => {
-                    flow.providers = (flow.providers || []).map(name => name === oldName ? newName : name);
-                });
-            }
-            provider._original_name = newName;
+            KBSettings.syncProviderName(settingsContext, provider);
         };
 
         const deleteLlmProvider = (provider) => {
-            if(!provider?.name) return;
-            const refs = llmFlows.value.filter(flow => (flow.providers || []).includes(provider.name)).map(flow => flow.name);
-            const message = refs.length
-                ? `确认删除 Provider ${provider.name}？它会同时从这些业务流移除：${refs.join(', ')}`
-                : `确认删除 Provider ${provider.name}？`;
-            if(!confirm(message)) return;
-            llmProviders.value = llmProviders.value.filter(p => p !== provider);
-            const fallback = llmProviders.value[0]?.name || '';
-            llmFlows.value.forEach(flow => {
-                flow.providers = (flow.providers || []).filter(name => name !== provider.name);
-                if(!flow.providers.length && fallback) flow.providers = [fallback];
-            });
-            showToast(`已删除 Provider：${provider.name}`, 'info', 4000);
+            KBSettings.deleteLlmProvider(settingsContext, provider);
         };
 
         const availableProvidersForFlow = (flow) => {
-            const selected = new Set(flow.providers || []);
-            return llmProviders.value.filter(provider => !selected.has(provider.name));
+            return KBSettings.availableProvidersForFlow(settingsContext, flow);
         };
 
         const addProviderToFlow = (flow) => {
-            if(!flow.new_provider) return;
-            flow.providers = flow.providers || [];
-            if(!flow.providers.includes(flow.new_provider)) {
-                flow.providers.push(flow.new_provider);
-            }
-            flow.new_provider = '';
+            KBSettings.addProviderToFlow(flow);
         };
 
         const removeFlowProvider = (flow, idx) => {
-            if(!flow.providers || flow.providers.length <= 1) return;
-            flow.providers.splice(idx, 1);
+            KBSettings.removeFlowProvider(flow, idx);
         };
 
         const moveFlowProvider = (flow, idx, delta) => {
-            const providers = flow.providers || [];
-            const target = idx + delta;
-            if(target < 0 || target >= providers.length) return;
-            const [item] = providers.splice(idx, 1);
-            providers.splice(target, 0, item);
+            KBSettings.moveFlowProvider(flow, idx, delta);
         };
+
+        const providerLabel = (name) => KBSettings.providerLabel(settingsContext, name);
+        const providerTimeout = (name) => KBSettings.providerTimeout(settingsContext, name);
 
         const closePreview = () => {
             previewOpen.value = false;

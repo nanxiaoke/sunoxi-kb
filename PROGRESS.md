@@ -1620,3 +1620,35 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 文档 action 和文档列表 view model 都已进入 `documents.js`。
 - `app.js` 中剩余最大独立块主要是图谱渲染、LLM provider/flow 编辑辅助函数、聊天/预览基础逻辑。
+
+## 2026-06-04 - WebUI 重构第十四阶段：LLM Provider/Flow 编辑辅助函数模块化
+
+### 目标
+继续清理设置页逻辑，把 LLM Provider 和业务流 Provider 链的编辑辅助函数迁移到设置模块。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/settings.js`：
+  - `KBSettings.providerLabel`
+  - `KBSettings.providerTimeout`
+  - `KBSettings.addLlmProvider`
+  - `KBSettings.syncProviderName`
+  - `KBSettings.deleteLlmProvider`
+  - `KBSettings.availableProvidersForFlow`
+  - `KBSettings.addProviderToFlow`
+  - `KBSettings.removeFlowProvider`
+  - `KBSettings.moveFlowProvider`
+- `settingsContext` 注入 `t`，用于模块内生成缺失 provider 文案。
+- `app.js` 中对应设置页函数改为调用 `KBSettings`，只保留薄 wrapper。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/settings.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/settings.js` 均 200。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `settings.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 设置页 API action 和 Provider/Flow 编辑辅助逻辑都已进入 `settings.js`。
+- `app.js` 中剩余最大独立块主要是图谱渲染、聊天/预览基础逻辑，以及少量全局 UI glue。

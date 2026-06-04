@@ -760,14 +760,8 @@ createApp({
         const fetchUrlSuccess = ref(false);
         const failedImports = ref([]);
         const qualityOnly = ref(false);
-        const qualityIssueLabels = {
-            summary_placeholder: '摘要缺失',
-            keypoints_placeholder: '关键点缺失',
-            entities_placeholder: '实体缺失',
-            quality_scan_failed: '扫描失败',
-        };
-        const issueLabel = (issue) => qualityIssueLabels[issue] || issue;
-        const issueText = (issues) => (issues || []).map(issueLabel).join(' / ');
+        const issueLabel = (issue) => KBDocuments.issueLabel(issue);
+        const issueText = (issues) => KBDocuments.issueText(issues);
         const maintenanceContext = {
             activeTab,
             associationReport,
@@ -816,60 +810,21 @@ createApp({
             await KBDocuments.loadDocs(documentsContext);
         };
 
-        const filteredDocs = computed(() => {
-            const q = docSearchText.value.trim().toLowerCase();
-            let list = docs.value.slice().sort((a, b) => b.mtime - a.mtime);
-            if(qualityOnly.value) list = list.filter(d => d.quality && !d.quality.ok);
-            if(!q) return list;
-            return list.filter(d => d.name.toLowerCase().includes(q) || d.relpath.toLowerCase().includes(q) || (d.type || '').toLowerCase().includes(q));
-        });
+        const filteredDocs = computed(() => KBDocuments.filterDocs(docs.value, {
+            query: docSearchText.value,
+            qualityOnly: qualityOnly.value
+        }));
 
         watch([docSearchText, selectedDocFolder, qualityOnly], () => { docsPage.value = 1; });
 
-        const folderRows = computed(() => {
-            const dirs = new Map();
-            const addDir = (path) => {
-                if(!dirs.has(path)) dirs.set(path, { path, label: path ? path.split('/').pop() : '全部文档', depth: path ? path.split('/').length - 1 : 0, count: 0 });
-            };
-            addDir('');
-            docs.value.forEach(doc => {
-                const parts = doc.relpath.split('/');
-                if(parts.length > 1) {
-                    for(let i = 1; i < parts.length; i++) addDir(parts.slice(0, i).join('/'));
-                }
-            });
-            dirs.forEach(folder => {
-                folder.count = folder.path === ''
-                    ? docs.value.length
-                    : docs.value.filter(d => d.relpath.startsWith(folder.path + '/')).length;
-            });
-            return Array.from(dirs.values()).sort((a, b) => {
-                if(a.path === '') return -1;
-                if(b.path === '') return 1;
-                return a.path.localeCompare(b.path, 'zh-Hans-CN');
-            });
-        });
+        const folderRows = computed(() => KBDocuments.buildFolderRows(docs.value));
 
-        const visibleDocs = computed(() => {
-            const folder = selectedDocFolder.value;
-            const list = !folder ? filteredDocs.value : filteredDocs.value.filter(d => d.relpath.startsWith(folder + '/'));
-            return list;
-        });
-        const docsTotalPages = computed(() => Math.max(1, Math.ceil(visibleDocs.value.length / docsPageSize.value)));
-        const pagedVisibleDocs = computed(() => {
-            const start = (docsPage.value - 1) * docsPageSize.value;
-            return visibleDocs.value.slice(start, start + docsPageSize.value);
-        });
+        const visibleDocs = computed(() => KBDocuments.visibleDocs(filteredDocs.value, selectedDocFolder.value));
+        const docsTotalPages = computed(() => KBDocuments.totalPages(visibleDocs.value, docsPageSize.value));
+        const pagedVisibleDocs = computed(() => KBDocuments.pageItems(visibleDocs.value, docsPage.value, docsPageSize.value));
 
-        const qualityBadCount = computed(() => docs.value.filter(d => d.quality && !d.quality.ok).length);
-        const qualityIssueSummary = computed(() => {
-            const counts = {};
-            docs.value.forEach(d => (d.quality?.issues || []).forEach(i => { counts[i] = (counts[i] || 0) + 1; }));
-            return Object.entries(counts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([issue, count]) => `${issueLabel(issue)} ${count}`)
-                .join('，');
-        });
+        const qualityBadCount = computed(() => KBDocuments.qualityBadCount(docs.value));
+        const qualityIssueSummary = computed(() => KBDocuments.qualityIssueSummary(docs.value));
 
         const repairDocQuality = async (path) => {
             await KBMaintenance.repairDocQuality(maintenanceContext, path);

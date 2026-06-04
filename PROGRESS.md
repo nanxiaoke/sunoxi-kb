@@ -1588,3 +1588,35 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 设置、维护、文档、候选池、RSS/公众号源管理已进入独立前端模块。
 - `app.js` 中剩余最大独立块主要是图谱渲染、文档列表 view model、LLM provider/flow 编辑辅助函数、聊天/预览基础逻辑。
+
+## 2026-06-04 - WebUI 重构第十三阶段：文档列表 View Model 模块化
+
+### 目标
+继续减少 `app.js` 中的纯展示计算，把文档列表过滤、目录树、分页和质量问题摘要迁移到文档模块。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/documents.js`：
+  - `KBDocuments.filterDocs`
+  - `KBDocuments.buildFolderRows`
+  - `KBDocuments.visibleDocs`
+  - `KBDocuments.totalPages`
+  - `KBDocuments.pageItems`
+  - `KBDocuments.qualityBadCount`
+  - `KBDocuments.qualityIssueSummary`
+  - `KBDocuments.issueLabel`
+  - `KBDocuments.issueText`
+- 文档质量问题标签映射迁移到 `documents.js`。
+- `app.js` 中文档过滤、目录树、分页、质量摘要和问题标签改成调用 `KBDocuments`。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/documents.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/documents.js` 均 200。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `documents.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 文档 action 和文档列表 view model 都已进入 `documents.js`。
+- `app.js` 中剩余最大独立块主要是图谱渲染、LLM provider/flow 编辑辅助函数、聊天/预览基础逻辑。

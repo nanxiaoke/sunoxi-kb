@@ -1,4 +1,11 @@
 (function (global) {
+    const qualityIssueLabels = {
+        summary_placeholder: '摘要缺失',
+        keypoints_placeholder: '关键点缺失',
+        entities_placeholder: '实体缺失',
+        quality_scan_failed: '扫描失败'
+    };
+
     function normalizeDocument(d) {
         const relpath = d.path || d.relpath;
         const parts = relpath.split('/');
@@ -13,6 +20,88 @@
             size: d.size_bytes || d.size || 0,
             mtime: new Date(d.modified || d.mtime || Date.now()).getTime() / 1000
         };
+    }
+
+    function issueLabel(issue) {
+        return qualityIssueLabels[issue] || issue;
+    }
+
+    function issueText(issues) {
+        return (issues || []).map(issueLabel).join(' / ');
+    }
+
+    function filterDocs(docs, { query = '', qualityOnly = false } = {}) {
+        const q = query.trim().toLowerCase();
+        let list = docs.slice().sort((a, b) => b.mtime - a.mtime);
+        if (qualityOnly) list = list.filter(d => d.quality && !d.quality.ok);
+        if (!q) return list;
+        return list.filter(d =>
+            d.name.toLowerCase().includes(q) ||
+            d.relpath.toLowerCase().includes(q) ||
+            (d.type || '').toLowerCase().includes(q)
+        );
+    }
+
+    function buildFolderRows(docs) {
+        const dirs = new Map();
+        const addDir = (path) => {
+            if (!dirs.has(path)) {
+                dirs.set(path, {
+                    path,
+                    label: path ? path.split('/').pop() : '全部文档',
+                    depth: path ? path.split('/').length - 1 : 0,
+                    count: 0
+                });
+            }
+        };
+
+        addDir('');
+        docs.forEach(doc => {
+            const parts = doc.relpath.split('/');
+            if (parts.length > 1) {
+                for (let i = 1; i < parts.length; i++) addDir(parts.slice(0, i).join('/'));
+            }
+        });
+
+        dirs.forEach(folder => {
+            folder.count = folder.path === ''
+                ? docs.length
+                : docs.filter(d => d.relpath.startsWith(folder.path + '/')).length;
+        });
+
+        return Array.from(dirs.values()).sort((a, b) => {
+            if (a.path === '') return -1;
+            if (b.path === '') return 1;
+            return a.path.localeCompare(b.path, 'zh-Hans-CN');
+        });
+    }
+
+    function visibleDocs(filteredDocs, folder) {
+        return !folder ? filteredDocs : filteredDocs.filter(d => d.relpath.startsWith(folder + '/'));
+    }
+
+    function totalPages(items, pageSize) {
+        return Math.max(1, Math.ceil(items.length / pageSize));
+    }
+
+    function pageItems(items, page, pageSize) {
+        const start = (page - 1) * pageSize;
+        return items.slice(start, start + pageSize);
+    }
+
+    function qualityBadCount(docs) {
+        return docs.filter(d => d.quality && !d.quality.ok).length;
+    }
+
+    function qualityIssueSummary(docs) {
+        const counts = {};
+        docs.forEach(d => (d.quality?.issues || []).forEach(i => {
+            counts[i] = (counts[i] || 0) + 1;
+        }));
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([issue, count]) => `${issueLabel(issue)} ${count}`)
+            .join('，');
     }
 
     function addFailedImport(ctx, item) {
@@ -136,10 +225,19 @@
     }
 
     global.KBDocuments = {
+        buildFolderRows,
         deleteDoc,
+        filterDocs,
         fetchUrl,
+        issueLabel,
+        issueText,
         loadDocs,
+        pageItems,
+        qualityBadCount,
+        qualityIssueSummary,
         retryFailedImport,
+        totalPages,
+        visibleDocs,
         uploadFiles
     };
 })(window);

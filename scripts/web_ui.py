@@ -557,16 +557,144 @@ def _chunks(text: str, max_chars: int = 3500) -> List[str]:
     return chunks
 
 
+def _load_translation_policy() -> Dict[str, Any]:
+    try:
+        from translation_policy import load_translation_policy
+        return load_translation_policy(KB_DIR)
+    except Exception:
+        logger.exception("Load translation_policy failed; using defaults")
+        return {
+            "enabled": True,
+            "mode": "bilingual_on_import",
+            "targets": "auto_opposite",
+            "chinese_source": {"translate_to_english": True},
+            "english_source": {"translate_to_chinese": True},
+        }
+
+
+def _strip_translated_meta(text: str) -> str:
+    """Remove already-translated artefacts before sending source back to the LLM.
+
+    Avoids LLM hallucinating the previous translation footer or echoing the
+    existing Chinese translation section when re-running retranslation.
+    """
+    if not text:
+        return text
+    drop_section_patterns = [
+        r"(?ms)^##\s*(?:🌐\s*中文翻译|🌍\s*English Translation|中文译文|英文原文|📄\s*原始内容预览)\s*$.*?(?=^##\s|\Z)",
+    ]
+    cleaned = text
+    for pat in drop_section_patterns:
+        cleaned = re.sub(pat, "", cleaned)
+    cleaned = re.sub(r"(?m)^>\s*\*?\*?翻译模型\*?\*?:\s*.*$", "", cleaned)
+    cleaned = re.sub(r"(?m)^>\s*\*?\*?重新翻译时间\*?\*?:\s*.*$", "", cleaned)
+    cleaned = re.sub(r"(?m)^>\s*\*?\*?Translation Model\*?\*?:\s*.*$", "", cleaned)
+    cleaned = re.sub(r"(?m)^>\s*\*?\*?Retranslation Time\*?\*?:\s*.*$", "", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _detect_wiki_source_language(wiki_text: str, raw_text: str) -> str:
+    try:
+        from translation_policy import detect_language
+    except Exception:
+        return "en"
+    candidate_samples: List[str] = []
+    for text in (raw_text, wiki_text):
+        if not text:
+            continue
+        for marker in ("## 英文原文", "## English Original", "## 原始内容", "## 原文", "## 原始内容预览"):
+            idx = text.find(marker)
+            if idx >= 0:
+                tail = text[idx + len(marker): idx + len(marker) + 6000]
+                if tail.strip():
+                    candidate_samples.append(tail)
+        if len(text) > 1800:
+            candidate_samples.append(text[1800:7800])
+        candidate_samples.append(text[:6000])
+    for sample in candidate_samples:
+        if not sample or not sample.strip():
+            continue
+        lang = detect_language(sample)
+        if lang in {"zh", "en"}:
+            return lang
+    return "en"
+
+
+def _resolve_retranslation_target(policy: Dict[str, Any], source_language: str) -> str:
+    try:
+        from translation_policy import target_languages_for
+        targets = target_languages_for(policy, source_language)
+    except Exception:
+        targets = []
+    if targets:
+        return targets[0]
+    if source_language == "zh":
+        return "en"
+    if source_language == "en":
+        return "zh"
+    return "zh"
+
+
+def _build_retranslation_prompts(target_language: str) -> Dict[str, str]:
+    if target_language == "zh":
+        system = "你是专业的 AI/软件工程技术翻译。标题必须保留原文，不翻译标题。输出忠实、准确、自然、可检索的中文。"
+        summary_instruction = "请为下面英文技术文档生成中文知识库元数据。标题必须保留原文，不要翻译标题。"
+        summary_fields = (
+            "- summary_zh: 150-300字中文摘要\n"
+            "- keypoints_zh: 3-5条中文关键点数组\n"
+            "- category_zh: 技术/学术论文/笔记/代码/教程/新闻/其他 之一\n"
+            "- entities_zh: 核心实体和术语数组，术语尽量中英并列"
+        )
+        chunk_instruction = (
+            "请把下面英文技术内容翻译成中文。标题、项目名、产品名、模型名、代码、命令、URL 不要翻译；"
+            "技术术语首次出现中英并列。只输出中文译文，不要解释。"
+        )
+    else:
+        system = (
+            "You are a professional technical translator. Preserve the original title exactly, "
+            "do not translate product names, model names, code, commands, or URLs. "
+            "Output faithful, accurate, and natural English suitable for a knowledge base."
+        )
+        summary_instruction = (
+            "Generate English knowledge-base metadata for the following Chinese technical document. "
+            "Preserve the original title exactly; do not translate it."
+        )
+        summary_fields = (
+            "- summary_en: 150-300 word English summary\n"
+            "- keypoints_en: 3-5 English key points (array)\n"
+            "- category_en: technology / paper / notes / code / tutorial / news / other\n"
+            "- entities_en: core entities and terms (array), prefer concise English"
+        )
+        chunk_instruction = (
+            "Translate the Chinese technical content below into natural, accurate, searchable English. "
+            "Do not translate product names, model names, code, commands, or URLs. "
+            "Output only the English translation, no extra commentary."
+        )
+    return {
+        "system": system,
+        "summary_instruction": summary_instruction,
+        "summary_fields": summary_fields,
+        "chunk_instruction": chunk_instruction,
+    }
+
+
 def _translate_wiki_document(wiki_text: str, *, provider_name: str, model: str) -> Dict[str, Any]:
     from llm_service import LLMService
 
     source_file = _source_file_for_wiki(wiki_text)
-    raw_text = source_file.read_text(encoding="utf-8", errors="ignore") if source_file else wiki_text
+    raw_text_raw = source_file.read_text(encoding="utf-8", errors="ignore") if source_file else wiki_text
     old_title = _parse_frontmatter_value(wiki_text, "title")
     if not old_title:
         m = re.search(r"(?m)^#\s+(.+?)\s*$", wiki_text)
         old_title = m.group(1).strip() if m else "Untitled"
-    original_title = _original_title_from_raw(raw_text, old_title)
+    original_title = _original_title_from_raw(raw_text_raw, old_title)
+    policy = _load_translation_policy()
+    source_language = _detect_wiki_source_language(wiki_text, raw_text_raw)
+    target_language = _resolve_retranslation_target(policy, source_language)
+    raw_text = _strip_translated_meta(raw_text_raw)
+    if not raw_text.strip():
+        raise ValueError("source content is empty after stripping translated metadata")
     llm = LLMService()
     resolved_provider = _resolve_translation_provider(provider_name)
     provider_cfg = llm.config.provider(resolved_provider)
@@ -574,10 +702,10 @@ def _translate_wiki_document(wiki_text: str, *, provider_name: str, model: str) 
         raise ValueError("model override is not supported yet; choose a configured provider instead")
     flow = llm.config.flow("retranslation")
     options = {"temperature": 0.1, "think": False, "max_tokens": 2500, "num_predict": 1800}
-    system = "你是专业的 AI/软件工程技术翻译。标题必须保留原文，不翻译标题。输出忠实、准确、自然、可检索的中文。"
+    prompts = _build_retranslation_prompts(target_language)
     guide = _term_guide()
 
-    summary_prompt = f"""请为下面英文技术文档生成中文知识库元数据。标题必须保留原文，不要翻译标题。
+    summary_prompt = f"""{prompts['summary_instruction']}
 
 {guide}
 
@@ -586,25 +714,33 @@ def _translate_wiki_document(wiki_text: str, *, provider_name: str, model: str) 
 {raw_text[:12000]}
 
 只输出 JSON，不要 Markdown 代码块。字段：
-- summary_zh: 150-300字中文摘要
-- keypoints_zh: 3-5条中文关键点数组
-- category_zh: 技术/学术论文/笔记/代码/教程/新闻/其他 之一
-- entities_zh: 核心实体和术语数组，术语尽量中英并列
+{prompts['summary_fields']}
 """
     meta_result = llm.chat("retranslation", [
-        {"role": "system", "content": system + " 只输出严格 JSON。"},
+        {"role": "system", "content": prompts["system"] + (" 只输出严格 JSON。" if target_language == "zh" else " Output strict JSON only.")},
         {"role": "user", "content": summary_prompt},
     ], provider_name=resolved_provider, options=options)
     if meta_result.status != "ok":
         raise RuntimeError(meta_result.error or "translation metadata generation failed")
     meta_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", (meta_result.content or "").strip(), flags=re.S).strip()
     meta = json.loads(meta_text)
+    if target_language == "zh":
+        summary_value = (meta.get("summary_zh") or "").strip()
+        keypoints_value = list(meta.get("keypoints_zh") or [])
+        category_value = (meta.get("category_zh") or "").strip()
+        entities_value = list(meta.get("entities_zh") or [])
+    else:
+        summary_value = (meta.get("summary_en") or "").strip()
+        keypoints_value = list(meta.get("keypoints_en") or [])
+        category_value = (meta.get("category_en") or "").strip()
+        entities_value = list(meta.get("entities_en") or [])
 
     translated_parts = []
     chunk_meta = []
+    chunk_failures: List[Dict[str, Any]] = []
     chunks = _chunks(raw_text, flow.chunk_chars)
     for i, chunk in enumerate(chunks, 1):
-        prompt = f"""请把下面英文技术内容翻译成中文。标题、项目名、产品名、模型名、代码、命令、URL 不要翻译；技术术语首次出现中英并列。
+        prompt = f"""{prompts['chunk_instruction']}
 
 {guide}
 
@@ -614,29 +750,38 @@ def _translate_wiki_document(wiki_text: str, *, provider_name: str, model: str) 
 待翻译内容：
 {chunk}
 
-只输出中文译文，不要解释。"""
+只输出译文，不要解释。"""
         result = llm.chat("retranslation", [
-            {"role": "system", "content": system},
+            {"role": "system", "content": prompts["system"]},
             {"role": "user", "content": prompt},
         ], provider_name=resolved_provider, options=options)
-        if result.status != "ok":
-            raise RuntimeError(result.error or f"translation chunk {i} failed")
-        translated_parts.append(result.content.strip())
         item = result.to_dict()
         item["chunk_index"] = i
         item["chunk_chars"] = len(chunk)
         item.pop("content", None)
+        if result.status != "ok":
+            chunk_failures.append(item)
+            item["status"] = "error"
+        else:
+            translated_parts.append((result.content or "").strip())
         chunk_meta.append(item)
+
+    if not translated_parts:
+        first_err = chunk_failures[0].get("error") if chunk_failures else "no chunks succeeded"
+        raise RuntimeError(f"all translation chunks failed: {first_err}")
 
     return {
         "title": original_title,
-        "summary": (meta.get("summary_zh") or "").strip(),
-        "keypoints": "\n".join(f"{idx}. {x}" for idx, x in enumerate(meta.get("keypoints_zh") or [], 1)),
-        "category": (meta.get("category_zh") or "").strip(),
-        "entities": "，".join(meta.get("entities_zh") or []),
+        "summary": summary_value,
+        "keypoints": "\n".join(f"{idx}. {x}" for idx, x in enumerate(keypoints_value, 1)),
+        "category": category_value,
+        "entities": "，".join(entities_value),
         "translation": "\n\n".join(x for x in translated_parts if x),
         "model": meta_result.model,
         "provider": meta_result.provider,
+        "source_language": source_language,
+        "target_language": target_language,
+        "chunk_failures": chunk_failures,
         "llm_result": meta_result.to_dict(),
         "llm_chunks": chunk_meta,
         "chunk_count": len(chunks),
@@ -1997,11 +2142,14 @@ def retranslate_document(relpath: str):
             new_text = _replace_section(new_text, "🔑 关键点", result["keypoints"])
         if result.get("entities"):
             new_text = _replace_section(new_text, "🏷️ 实体与概念", result["entities"])
+        target_language = result.get("target_language") or "zh"
+        translation_section = "🌍 English Translation" if target_language == "en" else "🌐 中文翻译"
         if result.get("translation"):
-            new_text = _replace_section(new_text, "🌐 中文翻译", result["translation"])
-        stamp = f"> **翻译模型**: {result['provider']} / {result['model'] or 'default'}\n> **重新翻译时间**: {datetime.now(timezone.utc).isoformat()}"
-        if "## 🌐 中文翻译" in new_text:
-            new_text = re.sub(r"(## 🌐 中文翻译\s*\n)", r"\1\n" + stamp + "\n\n", new_text, count=1)
+            new_text = _replace_section(new_text, translation_section, result["translation"])
+        stamp_provider = f"{result['provider']} / {result['model'] or 'default'}"
+        stamp = f"> **翻译模型**: {stamp_provider}\n> **重新翻译时间**: {datetime.now(timezone.utc).isoformat()}\n> **源语言**: {result.get('source_language', 'unknown')}\n> **目标语言**: {target_language}"
+        if f"## {translation_section}" in new_text:
+            new_text = re.sub(r"(## " + re.escape(translation_section) + r"\s*\n)", r"\1\n" + stamp + "\n\n", new_text, count=1)
         new_text = _upsert_frontmatter_mapping(new_text, "llm_retranslation", {
             "flow": "retranslation",
             "provider": result.get("provider", ""),
@@ -2010,6 +2158,9 @@ def retranslate_document(relpath: str):
             "duration_sec": result.get("llm_result", {}).get("duration_sec"),
             "chunk_count": result.get("chunk_count", len(result.get("llm_chunks", []))),
             "chunks": result.get("llm_chunks", []),
+            "source_language": result.get("source_language", ""),
+            "target_language": target_language,
+            "chunk_failures": result.get("chunk_failures", []),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         })
         if not dry_run:
@@ -2020,6 +2171,8 @@ def retranslate_document(relpath: str):
             "title": result["title"],
             "provider": result["provider"],
             "model": result["model"],
+            "source_language": result.get("source_language", ""),
+            "target_language": target_language,
             "dry_run": dry_run,
             "changed": new_text != old_text,
             "size_kb": round((len(new_text.encode("utf-8")) if dry_run else wiki_file.stat().st_size) / 1024, 1),
@@ -2031,6 +2184,7 @@ def retranslate_document(relpath: str):
             } if dry_run else None,
             "llm": result.get("llm_result", {}),
             "chunk_count": result.get("chunk_count", len(result.get("llm_chunks", []))),
+            "chunk_failures": result.get("chunk_failures", []),
         })
     except Exception as e:
         logger.error(f"Retranslate failed for {relpath}: {e}")
@@ -4267,12 +4421,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         </button>
                     </template>
                     <template v-else>
-                        <select v-if="!isEditingDoc" v-model="translationProvider" class="select select-sm select-bordered max-w-36" title="Translation provider">
+                        <select v-model="translationProvider" :disabled="isEditingDoc" class="select select-sm select-bordered max-w-36" title="Translation provider">
                             <option v-for="m in translationModels" :key="m.provider" :value="m.provider" :disabled="!m.available">
                                 {{ m.label || m.provider_name || m.provider }} · {{ m.kind || (m.online ? 'online' : 'local') }} · {{ m.timeout_sec || 60 }}s{{ m.available ? '' : (m.key_env ? ' · missing ' + m.key_env : ' · unavailable') }}
                             </option>
                         </select>
-                        <button class="btn btn-sm btn-outline" v-if="!isEditingDoc" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath">
+                        <button class="btn btn-sm btn-outline" @click="retranslateDoc" :disabled="isRetranslating || !previewDocPath || isEditingDoc" :title="retranslateButtonTitle">
                             <span v-if="isRetranslating" class="loading loading-spinner loading-xs mr-1"></span>{{ t('doc.retranslate') }}
                         </button>
                         <button class="btn btn-sm btn-ghost" v-if="!isEditingDoc" @click="isEditingDoc = true">✏️ {{ t('common.edit') }}</button>
@@ -4494,7 +4648,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             selectProvider: '选择 Provider', add: '添加', remove: '移除', up: '上移', down: '下移',
                             missingProvider: 'Provider 不存在'
                         },
-                        doc: { retranslate: '重新翻译' },
+                        doc: { retranslate: '重新翻译', retranslateDisabledEdit: '保存或取消编辑后才能重翻译', retranslateDisabledNoDoc: '请先选择文档', retranslateDisabledNoModel: '模型未加载' },
                         common: { edit: '编辑', save: '保存' }
                     },
                     en: {
@@ -4528,7 +4682,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                             selectProvider: 'Select provider', add: 'Add', remove: 'Remove', up: 'Up', down: 'Down',
                             missingProvider: 'Missing provider'
                         },
-                        doc: { retranslate: 'Retranslate' },
+                        doc: { retranslate: 'Retranslate', retranslateDisabledEdit: 'Save or cancel edit first', retranslateDisabledNoDoc: 'Select a document first', retranslateDisabledNoModel: 'Model not loaded' },
                         common: { edit: 'Edit', save: 'Save' }
                     }
                 };
@@ -4752,6 +4906,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 const restoringLlmBackup = ref('');
                 const objectEntries = (obj) => Object.entries(obj || {});
                 const selectedTranslationModel = computed(() => translationModels.value.find(m => m.provider === translationProvider.value || m.provider_name === translationProvider.value || m.id === translationProvider.value) || null);
+                const retranslateButtonTitle = computed(() => {
+                    if(isEditingDoc.value) return t('doc.retranslateDisabledEdit') || '保存或取消编辑后才能重翻译';
+                    if(!previewDocPath.value) return t('doc.retranslateDisabledNoDoc') || '请先选择文档';
+                    const m = selectedTranslationModel.value;
+                    if(!m) return t('doc.retranslateDisabledNoModel') || '模型未加载';
+                    if(m.available === false) {
+                        return `${m.label || m.provider_name || m.provider} 不可用${m.key_env ? '：缺少 ' + m.key_env : ''}`;
+                    }
+                    return `${t('doc.retranslate') || '重新翻译'}：${translationProviderLabel(m)}`;
+                });
                 const translationProviderLabel = (model) => {
                     if(!model) return translationProvider.value || '-';
                     const kind = model.kind === 'online' ? '在线' : '本地';
@@ -4996,8 +5160,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                 };
 
                 const retranslateDoc = async () => {
-                    if(!previewDocPath.value || isRetranslating.value) return;
+                    if(!previewDocPath.value || isRetranslating.value || isEditingDoc.value) return;
                     const selected = selectedTranslationModel.value || {};
+                    if(!selected) {
+                        showToast('模型未加载，稍后重试', 'warning', 5000);
+                        return;
+                    }
                     if(selected.available === false) {
                         showToast(`${translationProviderLabel(selected)} 不可用${selected.key_env ? `：缺少 ${selected.key_env}` : ''}`, 'warning', 6000);
                         return;
@@ -5013,7 +5181,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         const preview = await previewRes.json();
                         if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
                         const translationPreview = (preview.preview?.translation || preview.preview?.summary || '').slice(0, 220);
-                        const confirmMsg = `确认应用重新翻译？\n模型：${preview.provider || translationProvider.value} / ${preview.model || selected.model || '-'}\nchunks：${preview.chunk_count || 0}\n预览：${translationPreview}\n\n确认后会再次调用模型并写入文档。`;
+                        const sourceLang = preview.source_language || 'auto';
+                        const targetLang = preview.target_language || 'zh';
+                        const failedChunks = Array.isArray(preview.chunk_failures) ? preview.chunk_failures.length : 0;
+                        const failureNote = failedChunks > 0 ? `\n⚠️ ${failedChunks} 个分片失败，提交后仅写成功分片。` : '';
+                        const langNote = (sourceLang === targetLang) ? `\n⚠️ 源/目标语言均为 ${sourceLang}，策略不匹配，请检查 translation_policy。` : '';
+                        const confirmMsg = `确认应用重新翻译？\n模型：${preview.provider || translationProvider.value} / ${preview.model || selected.model || '-'}\n方向：${sourceLang} → ${targetLang}\nchunks：${preview.chunk_count || 0}${failureNote}${langNote}\n预览：${translationPreview}\n\n确认后会再次调用模型并写入文档。`;
                         if(!confirm(confirmMsg)) {
                             showToast('已取消重新翻译写入', 'info');
                             return;
@@ -5026,7 +5199,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
                         });
                         const data = await res.json();
                         if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        showToast('重新翻译完成', 'success', 5000);
+                        showToast(`重新翻译完成：${data.source_language}→${data.target_language}`, 'success', 5000);
                         await previewDoc(previewDocPath.value);
                         await loadDocs();
                     } catch(e) {

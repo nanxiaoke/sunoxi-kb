@@ -117,6 +117,46 @@ def main() -> int:
         _assert("planned" in backfill_dry_payload, "translation backfill dry-run missing planned count")
         _assert(backfill_dry_payload.get("applied") == 0, "translation backfill dry-run should not apply changes")
 
+        # Retranslation source/target language detection
+        webui_source = (ROOT / "scripts" / "web_ui.py").read_text(encoding="utf-8")
+        for token in [
+            "_detect_wiki_source_language",
+            "_resolve_retranslation_target",
+            "_build_retranslation_prompts",
+            "_strip_translated_meta",
+            "source_language",
+            "target_language",
+            "🌍 English Translation",
+            "🌐 中文翻译",
+            "retranslateButtonTitle",
+            "isEditingDoc",
+        ]:
+            _assert(token in webui_source, f"retranslation source missing token: {token}")
+
+        # Verify _strip_translated_meta strips the legacy translation footer
+        from web_ui import _strip_translated_meta
+        sample = "# Title\n\n> 翻译模型: deepseek-v4-pro\n> 重新翻译时间: 2026-06-01\n正文文本。\n"
+        cleaned = _strip_translated_meta(sample)
+        _assert("翻译模型" not in cleaned, "_strip_translated_meta should drop translation model footer")
+        _assert("重新翻译时间" not in cleaned, "_strip_translated_meta should drop retranslation time footer")
+        _assert("正文文本" in cleaned, "_strip_translated_meta should preserve body text")
+
+        # Verify _detect_wiki_source_language distinguishes zh from en
+        from web_ui import _detect_wiki_source_language, _resolve_retranslation_target
+        zh_wiki = "# 中文章节\n这是一段中文正文。\n"
+        zh_raw = "# 中文章节\n> 原文标题: Foo Bar\n\n> 翻译模型: deepseek-v4-pro\n\n## 中文译文\nThe Batch ...\n\n## 英文原文\n# English Source Article\n\nThis is the body of an English source article that contains real English prose for the model to detect."
+        _assert(_detect_wiki_source_language(zh_wiki, zh_raw) == "en",
+                "raw with English ## 英文原文 should detect as en, not zh")
+        en_wiki = "# 英文 wiki\nThis is English content.\n"
+        en_raw = "## 英文原文\nThis is a long English source article about AI. It has multiple English sentences for proper detection."
+        _assert(_detect_wiki_source_language(en_wiki, en_raw) == "en",
+                "raw with English body should detect as en")
+
+        # Verify _resolve_retranslation_target flips zh -> en, en -> zh
+        policy = {"targets": "auto_opposite", "chinese_source": {"translate_to_english": True}, "english_source": {"translate_to_chinese": True}}
+        _assert(_resolve_retranslation_target(policy, "zh") == "en", "zh source should resolve to en target")
+        _assert(_resolve_retranslation_target(policy, "en") == "zh", "en source should resolve to zh target")
+
         dry_run = client.post("/api/quality/repair", json={"limit": 1, "dry_run": True})
         _assert(dry_run.status_code == 200, f"quality repair dry-run returned {dry_run.status_code}")
         dry_payload = dry_run.get_json()

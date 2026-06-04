@@ -1270,3 +1270,46 @@ python3 scripts/processor.py --process-all
 ### 下一阶段建议
 - 继续把 `app.js` 按功能拆成无构建模块：`api.js`、`actions/retranslate.js`、`quality/linkQuality.js`、`views/docs.js`。
 - 待边界稳定后，再迁移到 Vite/Vue SFC + TypeScript，并由 Flask serve build 后的 dist。
+
+## 2026-06-04 - WebUI 重构第三阶段：前端能力模块化
+
+### 目标
+继续拆分 `scripts/webui/static/js/app.js`，先抽离不会改变运行方式的前端能力模块，保持无需 npm build、无需额外服务，项目仍可通过 `python3 scripts/web_ui.py` 一条命令启动。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/api.js`：
+  - 统一封装 `getJson`、`sendJson`、`requestJson`
+  - 减少 `app.js` 中重复的 `fetch -> json -> error` 样板代码
+- 新增 `scripts/webui/static/js/modules/linkQuality.js`：
+  - 把链接质量摘要计算从 Vue 主应用中抽出
+  - 输出统一的 `healthy / needs_attention`、硬问题数量和补链优化队列数量
+- 新增 `scripts/webui/static/js/modules/retranslate.js`：
+  - 把「重新翻译」按钮 action 构造逻辑抽成 `KBRetranslate.buildRetranslateAction`
+  - 把 dry-run 预览、确认弹窗、正式写入、刷新文档列表流程抽成 `KBRetranslate.runRetranslate`
+  - `app.js` 只保留上下文注入和一行 action 调用，避免按钮状态和业务 guard 再次分散
+- `index.html` 改为依次加载：
+  - `/webui/static/js/modules/api.js`
+  - `/webui/static/js/modules/linkQuality.js`
+  - `/webui/static/js/modules/retranslate.js`
+  - `/webui/static/js/app.js`
+- `scripts/smoke_webui_audit.py` 覆盖模块目录，确保后续新增前端模块也会被 smoke token 检查纳入。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/api.js` 通过。
+- `node --check scripts/webui/static/js/modules/linkQuality.js` 通过。
+- `node --check scripts/webui/static/js/modules/retranslate.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证首页和 4 个静态 JS 路由均返回 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，`/webui/static/js/modules/retranslate.js` 返回 `text/javascript`。
+
+### 当前状态
+- `app.js` 从约 2173 行降到约 2120 行，并减少大量重复 API 调用样板与重翻译内联流程。
+- 前端模块目录已建立：`scripts/webui/static/js/modules/`。
+- 一条命令启动能力保持不变。
+
+### 下一阶段建议
+- 继续拆 `app.js` 的文档管理、候选池、LLM 配置、知识关联 view/action 模块。
+- 等无构建模块边界稳定后，再评估是否迁移到 Vite/Vue SFC + TypeScript；短期不建议直接切换，以免破坏 Windows 一键启动体验。

@@ -50,28 +50,7 @@ createApp({
         const webuiApp = computed(() => webuiConfig.value.app || {});
         const webuiFeatures = computed(() => webuiConfig.value.features || {});
         const featureEnabled = (name) => webuiFeatures.value[name] !== false;
-        const linkQualityHealth = computed(() => {
-            const summary = associationReport.value?.summary || {};
-            const hardIssues = Number(summary.broken_links || 0) + Number(summary.orphans || 0) + Number(summary.weak_docs || 0);
-            const optimizationQueue = Number(summary.missing_cross_links || 0)
-                + Number(summary.auto_link_candidates || 0)
-                + Number(summary.recommendation_only_links || 0)
-                + Number(summary.low_confidence_links || 0);
-            return {
-                status: hardIssues > 0 ? 'needs_attention' : 'healthy',
-                hardIssues,
-                optimizationQueue,
-                brokenLinks: Number(summary.broken_links || 0),
-                orphans: Number(summary.orphans || 0),
-                weakDocs: Number(summary.weak_docs || 0),
-                missingCrossLinks: Number(summary.missing_cross_links || 0),
-                autoLinkCandidates: Number(summary.auto_link_candidates || 0),
-                recommendationOnlyLinks: Number(summary.recommendation_only_links || 0),
-                lowConfidenceLinks: Number(summary.low_confidence_links || 0),
-                duplicateGroups: Number(summary.duplicate_groups || 0),
-                duplicateDocs: Number(summary.duplicate_docs || 0)
-            };
-        });
+        const linkQualityHealth = computed(() => KBLinkQuality.summarizeLinkQuality(associationReport.value?.summary || {}));
         const i18n = {
             zh: {
                 nav: { chat: '智能问答', graph: '知识图谱', docs: '文档管理', candidates: '候选池', wechat: '公众号订阅', rss: 'RSS订阅', settings: '系统设置' },
@@ -154,9 +133,7 @@ createApp({
         const loadWebuiConfig = async () => {
             loadingWebuiConfig.value = true;
             try {
-                const res = await fetch('/api/webui/config');
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.getJson('/api/webui/config');
                 webuiConfig.value = {
                     app: data.app || webuiConfig.value.app,
                     features: data.features || webuiConfig.value.features,
@@ -172,13 +149,7 @@ createApp({
         const saveWebuiConfig = async () => {
             savingWebuiConfig.value = true;
             try {
-                const res = await fetch('/api/webui/config', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(webuiConfig.value)
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.sendJson('/api/webui/config', webuiConfig.value, { method: 'PATCH' });
                 webuiConfig.value = {
                     app: data.app || webuiConfig.value.app,
                     features: data.features || webuiConfig.value.features,
@@ -367,43 +338,19 @@ createApp({
             const kind = model.kind === 'online' ? '在线' : '本地';
             return `${model.label || model.provider_name || model.provider || kind} · ${model.model || '-'}`;
         };
-        const retranslateAction = computed(() => {
-            const model = selectedTranslationModel.value;
-            const disabled = (reason, title) => ({
-                canRun: false,
-                disabled: true,
-                busy: isRetranslating.value,
-                reason,
-                title,
-                model
-            });
-            if(isRetranslating.value) {
-                return disabled('busy', t('doc.retranslate') || '重新翻译');
-            }
-            if(isEditingDoc.value) {
-                return disabled('editing', t('doc.retranslateDisabledEdit') || '保存或取消编辑后才能重翻译');
-            }
-            if(!previewDocPath.value) {
-                return disabled('missing_doc', t('doc.retranslateDisabledNoDoc') || '请先选择文档');
-            }
-            if(!model) {
-                return disabled('missing_model', t('doc.retranslateDisabledNoModel') || '模型未加载');
-            }
-            if(model.available === false) {
-                return disabled(
-                    'unavailable_model',
-                    `${model.label || model.provider_name || model.provider} 不可用${model.key_env ? '：缺少 ' + model.key_env : ''}`
-                );
-            }
-            return {
-                canRun: true,
-                disabled: false,
-                busy: false,
-                reason: '',
-                title: `${t('doc.retranslate') || '重新翻译'}：${translationProviderLabel(model)}`,
-                model
-            };
-        });
+        const retranslateContext = {
+            selectedTranslationModel,
+            isRetranslating,
+            isEditingDoc,
+            previewDocPath,
+            translationProvider,
+            t,
+            translationProviderLabel,
+            showToast,
+            previewDoc: (...args) => previewDoc(...args),
+            loadDocs: (...args) => loadDocs(...args)
+        };
+        const retranslateAction = computed(() => KBRetranslate.buildRetranslateAction(retranslateContext));
         const retranslateButtonTitle = computed(() => retranslateAction.value.title);
         const llmModeLabel = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.label) || llmMode.value || 'custom');
         const llmModeDescription = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.description) || '');
@@ -643,62 +590,12 @@ createApp({
             }
         };
 
-        const retranslateDoc = async () => {
-            const action = retranslateAction.value;
-            if(!action.canRun) {
-                if(action.title) showToast(action.title, 'warning', 5000);
-                return;
-            }
-            const selected = action.model;
-            if(selected.available === false) {
-                showToast(`${translationProviderLabel(selected)} 不可用${selected.key_env ? `：缺少 ${selected.key_env}` : ''}`, 'warning', 6000);
-                return;
-            }
-            isRetranslating.value = true;
-            showToast(`正在使用 ${translationProviderLabel(selected)} 生成重翻译预览...`, 'info', 6000);
-            try {
-                const previewRes = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}/translate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ provider: translationProvider.value, model: selected.model || '', dry_run: true })
-                });
-                const preview = await previewRes.json();
-                if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
-                const translationPreview = (preview.preview?.translation || preview.preview?.summary || '').slice(0, 220);
-                const sourceLang = preview.source_language || 'auto';
-                const targetLang = preview.target_language || 'zh';
-                const failedChunks = Array.isArray(preview.chunk_failures) ? preview.chunk_failures.length : 0;
-                const failureNote = failedChunks > 0 ? `\n⚠️ ${failedChunks} 个分片失败，提交后仅写成功分片。` : '';
-                const langNote = (sourceLang === targetLang) ? `\n⚠️ 源/目标语言均为 ${sourceLang}，策略不匹配，请检查 translation_policy。` : '';
-                const confirmMsg = `确认应用重新翻译？\n模型：${preview.provider || translationProvider.value} / ${preview.model || selected.model || '-'}\n方向：${sourceLang} → ${targetLang}\nchunks：${preview.chunk_count || 0}${failureNote}${langNote}\n预览：${translationPreview}\n\n确认后会再次调用模型并写入文档。`;
-                if(!confirm(confirmMsg)) {
-                    showToast('已取消重新翻译写入', 'info');
-                    return;
-                }
-                showToast('正在应用重新翻译...', 'info', 6000);
-                const res = await fetch(`/api/documents/${encodeURIComponent(previewDocPath.value)}/translate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ provider: translationProvider.value, model: selected.model || '', dry_run: false })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(`重新翻译完成：${data.source_language}→${data.target_language}`, 'success', 5000);
-                await previewDoc(previewDocPath.value);
-                await loadDocs();
-            } catch(e) {
-                showToast(`重新翻译失败: ${e.message}`, 'error', 8000);
-            } finally {
-                isRetranslating.value = false;
-            }
-        };
+        const retranslateDoc = async () => KBRetranslate.runRetranslate(retranslateContext);
 
         const loadLlmConfig = async () => {
             loadingLlmConfig.value = true;
             try {
-                const res = await fetch('/api/llm/config');
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.getJson('/api/llm/config');
                 llmProviders.value = normalizeLlmProviders(data.providers);
                 llmFlows.value = normalizeLlmFlows(data.flows);
                 llmSecretSetup.value = data.secret_setup || null;
@@ -739,13 +636,7 @@ createApp({
                         options: f.options || {}
                     }))
                 };
-                const res = await fetch('/api/llm/config', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.sendJson('/api/llm/config', payload, { method: 'PATCH' });
                 llmProviders.value = normalizeLlmProviders(data.providers);
                 llmFlows.value = normalizeLlmFlows(data.flows);
                 llmSecretSetup.value = data.secret_setup || llmSecretSetup.value;
@@ -793,9 +684,7 @@ createApp({
 
         const loadLlmBackups = async () => {
             try {
-                const res = await fetch('/api/llm/config/backups');
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.getJson('/api/llm/config/backups');
                 llmBackups.value = data.backups || [];
             } catch(e) {
                 showToast(`加载配置备份失败: ${e.message}`, 'error', 7000);
@@ -842,9 +731,7 @@ createApp({
         const loadTranslationBackfillAudit = async () => {
             loadingTranslationBackfill.value = true;
             try {
-                const res = await fetch('/api/translation/backfill?limit=8');
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.getJson('/api/translation/backfill?limit=8');
                 translationBackfillAudit.value = data;
             } catch(e) {
                 showToast(`加载补译审计失败: ${e.message}`, 'error', 7000);
@@ -856,13 +743,7 @@ createApp({
         const previewTranslationBackfillDryRun = async () => {
             loadingTranslationBackfill.value = true;
             try {
-                const res = await fetch('/api/translation/backfill', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 8, dry_run: true })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const data = await KBApi.sendJson('/api/translation/backfill', { limit: 8, dry_run: true }, { method: 'POST' });
                 translationBackfillDryRun.value = data;
                 translationBackfillAudit.value = data.audit || translationBackfillAudit.value;
                 showToast(`补译 dry-run：计划 ${data.planned || 0} 篇，已写入 ${data.applied || 0} 篇`, 'info', 5000);
@@ -1795,9 +1676,7 @@ createApp({
         const loadAssociations = async (rebuild=false) => {
             loadingAssociations.value = true;
             try {
-                const res = await fetch('/api/associations', { method: rebuild ? 'POST' : 'GET' });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '加载关联报告失败');
+                const data = await KBApi.requestJson('/api/associations', { method: rebuild ? 'POST' : 'GET' });
                 associationReport.value = data;
                 if(rebuild) showToast('知识关联报告已重建', 'success');
             } catch(e) {

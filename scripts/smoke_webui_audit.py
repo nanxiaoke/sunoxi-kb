@@ -18,12 +18,17 @@ from web_ui import app  # noqa: E402
 WEB_UI_SOURCE = ROOT / "scripts" / "web_ui.py"
 WEB_UI_TEMPLATE = ROOT / "scripts" / "webui" / "templates" / "index.html"
 WEB_UI_APP_JS = ROOT / "scripts" / "webui" / "static" / "js" / "app.js"
+WEB_UI_STATIC_JS_DIR = ROOT / "scripts" / "webui" / "static" / "js"
 
 
 def _webui_sources() -> str:
     parts = [WEB_UI_SOURCE.read_text(encoding="utf-8")]
     for source in (WEB_UI_TEMPLATE, WEB_UI_APP_JS):
         if source.exists():
+            parts.append(source.read_text(encoding="utf-8"))
+    modules_dir = WEB_UI_STATIC_JS_DIR / "modules"
+    if modules_dir.exists():
+        for source in sorted(modules_dir.glob("*.js")):
             parts.append(source.read_text(encoding="utf-8"))
     return "\n".join(parts)
 
@@ -38,6 +43,9 @@ def main() -> int:
         home = client.get("/")
         _assert(home.status_code == 200, f"home returned {home.status_code}")
         html = home.get_data(as_text=True)
+        _assert("/webui/static/js/modules/api.js" in html, "home should load API helper module")
+        _assert("/webui/static/js/modules/linkQuality.js" in html, "home should load link quality module")
+        _assert("/webui/static/js/modules/retranslate.js" in html, "home should load retranslation module")
         _assert("/webui/static/js/app.js" in html, "home should load external WebUI app.js")
         web_ui_source = _webui_sources()
         for token in [
@@ -55,6 +63,9 @@ def main() -> int:
             "loadTranslationBackfillAudit",
             "previewTranslationBackfillDryRun",
             "linkQualityHealth",
+            "KBApi",
+            "KBLinkQuality",
+            "KBRetranslate",
             "补链优化队列",
         ]:
             _assert(token in web_ui_source, f"missing WebUI token: {token}")

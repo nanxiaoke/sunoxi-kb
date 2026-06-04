@@ -85,10 +85,83 @@
         }
     }
 
+    function setCandidateEditForm(ctx, item) {
+        ctx.candidateEditItem.value = item;
+        ctx.candidateEditOriginalTitle.value = item.title || '';
+        ctx.candidateEditForm.id = item.id;
+        ctx.candidateEditForm.title = item.review_title || item.translated_title || item.title || '';
+        ctx.candidateEditForm.category = item.review_category || '技术';
+        ctx.candidateEditForm.tagsText = (item.review_tags?.length ? item.review_tags : (item.translated_topics || item.translation?.topics || [])).join(', ');
+        ctx.candidateEditForm.notes = item.edited_metadata?.notes || '';
+    }
+
+    function editCandidate(ctx, item) {
+        setCandidateEditForm(ctx, item);
+        ctx.candidateEditOpen.value = true;
+    }
+
+    function closeCandidateEdit(ctx) {
+        ctx.candidateEditOpen.value = false;
+        ctx.savingCandidateEdit.value = false;
+        ctx.candidateEditItem.value = null;
+    }
+
+    function candidateReviewPayload(ctx) {
+        return {
+            title: ctx.candidateEditForm.title,
+            category: ctx.candidateEditForm.category,
+            tags: ctx.candidateEditForm.tagsText,
+            notes: ctx.candidateEditForm.notes
+        };
+    }
+
+    async function saveCandidateEdit(ctx) {
+        if (!ctx.candidateEditForm.id) return;
+        ctx.savingCandidateEdit.value = true;
+        try {
+            await KBApi.sendJson(
+                `/api/candidates/${encodeURIComponent(ctx.candidateEditForm.id)}/metadata`,
+                candidateReviewPayload(ctx),
+                { method: 'PATCH' }
+            );
+            ctx.showToast('审核信息已保存，导入时会优先使用', 'success', 5000);
+            closeCandidateEdit(ctx);
+            await loadCandidates(ctx);
+        } catch (e) {
+            ctx.showToast(`保存审核信息失败: ${e.message}`, 'error', 7000);
+        } finally {
+            ctx.savingCandidateEdit.value = false;
+        }
+    }
+
+    async function saveCandidateReviewInline(ctx) {
+        if (!ctx.candidateEditForm.id) return;
+        ctx.savingCandidateEdit.value = true;
+        try {
+            await KBApi.sendJson(
+                `/api/candidates/${encodeURIComponent(ctx.candidateEditForm.id)}/metadata`,
+                candidateReviewPayload(ctx),
+                { method: 'PATCH' }
+            );
+            ctx.showToast('审核信息已保存，导入时会优先使用', 'success', 5000);
+            await loadCandidates(ctx);
+            await ctx.previewCandidate(ctx.candidateEditForm.id);
+        } catch (e) {
+            ctx.showToast(`保存审核信息失败: ${e.message}`, 'error', 7000);
+        } finally {
+            ctx.savingCandidateEdit.value = false;
+        }
+    }
+
     global.KBCandidates = {
         batchTranslatePreview,
+        closeCandidateEdit,
+        editCandidate,
         loadCandidates,
         restoreCandidate,
+        saveCandidateEdit,
+        saveCandidateReviewInline,
+        setCandidateEditForm,
         skipCandidate,
         translateCandidate
     };

@@ -742,6 +742,11 @@ createApp({
             loadingCandidates,
             translatingCandidateId,
             batchTranslatingPreview,
+            candidateEditOpen,
+            savingCandidateEdit,
+            candidateEditItem,
+            candidateEditOriginalTitle,
+            candidateEditForm,
             previewMode,
             showToast,
             closePreview,
@@ -1005,13 +1010,7 @@ createApp({
                 const data = await res.json();
                 previewMode.value = 'candidate';
                 candidateWorkbenchItem.value = data;
-                candidateEditItem.value = data;
-                candidateEditOriginalTitle.value = data.title || '';
-                candidateEditForm.id = data.id;
-                candidateEditForm.title = data.review_title || data.translated_title || data.title || '';
-                candidateEditForm.category = data.review_category || '技术';
-                candidateEditForm.tagsText = (data.review_tags?.length ? data.review_tags : (data.translated_topics || data.translation?.topics || [])).join(', ');
-                candidateEditForm.notes = data.edited_metadata?.notes || '';
+                KBCandidates.setCandidateEditForm(candidateContext, data);
                 previewDocName.value = data.translated_title || data.title || '候选文章';
                 const trans = data.translation || {};
                 const zhTitle = data.translated_title || trans.translated_title || '';
@@ -1065,72 +1064,19 @@ createApp({
         };
 
         const editCandidate = (item) => {
-            candidateEditItem.value = item;
-            candidateEditOriginalTitle.value = item.title || '';
-            candidateEditForm.id = item.id;
-            candidateEditForm.title = item.review_title || item.translated_title || item.title || '';
-            candidateEditForm.category = item.review_category || '技术';
-            candidateEditForm.tagsText = (item.review_tags?.length ? item.review_tags : (item.translated_topics || [])).join(', ');
-            candidateEditForm.notes = item.edited_metadata?.notes || '';
-            candidateEditOpen.value = true;
+            KBCandidates.editCandidate(candidateContext, item);
         };
 
         const closeCandidateEdit = () => {
-            candidateEditOpen.value = false;
-            savingCandidateEdit.value = false;
-            candidateEditItem.value = null;
+            KBCandidates.closeCandidateEdit(candidateContext);
         };
 
         const saveCandidateEdit = async () => {
-            if(!candidateEditForm.id) return;
-            savingCandidateEdit.value = true;
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(candidateEditForm.id)}/metadata`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: candidateEditForm.title,
-                        category: candidateEditForm.category,
-                        tags: candidateEditForm.tagsText,
-                        notes: candidateEditForm.notes,
-                    })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '保存失败');
-                showToast('审核信息已保存，导入时会优先使用', 'success', 5000);
-                closeCandidateEdit();
-                await loadCandidates();
-            } catch(e) {
-                showToast(`保存审核信息失败: ${e.message}`, 'error', 7000);
-            } finally {
-                savingCandidateEdit.value = false;
-            }
+            await KBCandidates.saveCandidateEdit(candidateContext);
         };
 
         const saveCandidateReviewInline = async () => {
-            if(!candidateEditForm.id) return;
-            savingCandidateEdit.value = true;
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(candidateEditForm.id)}/metadata`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: candidateEditForm.title,
-                        category: candidateEditForm.category,
-                        tags: candidateEditForm.tagsText,
-                        notes: candidateEditForm.notes,
-                    })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '保存失败');
-                showToast('审核信息已保存，导入时会优先使用', 'success', 5000);
-                await loadCandidates();
-                await previewCandidate(candidateEditForm.id);
-            } catch(e) {
-                showToast(`保存审核信息失败: ${e.message}`, 'error', 7000);
-            } finally {
-                savingCandidateEdit.value = false;
-            }
+            await KBCandidates.saveCandidateReviewInline(candidateContext);
         };
 
         const loadBatchImportStatus = async () => {

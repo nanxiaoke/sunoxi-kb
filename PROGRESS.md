@@ -1164,3 +1164,14 @@ python3 scripts/processor.py --process-all
 - `python3 scripts/smoke_webui_audit.py` 通过
 - `karpathy-kb.service` 已重启
 - `/api/translation/models` 确认 DeepSeek Pro + Local Gemma4 均 available
+
+### 补充验证：Chromium 端到端 UI 检查
+2026-06-04 通过本机 headless Chromium 做了真实 WebUI 交互验证：
+- 打开 `http://127.0.0.1:5080`，进入「文档管理」
+- 打开首篇文档预览抽屉
+- 「重新翻译」按钮状态：`disabled=false`
+- 按钮 title：`重新翻译：Local Gemma4 · gemma4:e4b`
+- 点击按钮后发出 `POST /api/documents/<path>/translate`
+- 请求体包含：`provider=local_gemma4`、`model=gemma4:e4b`、`dry_run=true`
+- 前端进入确认弹窗流程；验证时拦截 `/translate` 返回 mock dry-run 结果并取消确认，因此没有写入文档
+- 截图：`/tmp/karpathy-retranslate-validation.png`

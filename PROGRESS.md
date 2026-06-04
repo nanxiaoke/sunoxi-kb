@@ -1527,3 +1527,30 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 候选池主要 action、预览构造和导入后入口已进入 `candidates.js`。
 - `app.js` 中候选分组/view model 仍可继续拆；图谱渲染仍是最大独立块。
+
+## 2026-06-04 - WebUI 重构第十一阶段：候选分组 View Model 模块化
+
+### 目标
+完成候选池中较安全的展示计算迁移，把候选分组、等级样式和日期格式化从 `app.js` 抽离。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/candidates.js`：
+  - `KBCandidates.buildCandidateGroups`
+  - `KBCandidates.tierBadgeClass`
+  - `KBCandidates.tierLabel`
+  - `KBCandidates.tierCardClass`
+  - `KBCandidates.formatCandidateDate`
+- 候选等级元数据和候选排序逻辑迁移到 `candidates.js`。
+- `app.js` 中候选分组、等级 badge/card class、日期格式化改成调用 `KBCandidates`。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/candidates.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `candidates.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 候选池 action、预览、导入后入口和分组 view model 已基本完成模块化。
+- `app.js` 中剩余最大独立块主要是图谱渲染，以及 RSS/公众号源管理。

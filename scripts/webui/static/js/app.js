@@ -691,47 +691,11 @@ createApp({
         const candidateEditOriginalTitle = ref('');
         const candidateEditForm = reactive({ id: '', title: '', category: '技术', tagsText: '', notes: '' });
         const lastImportResult = ref(null);
-        const tierMeta = {
-            A: { title: 'A · 优先导入', badgeClass: 'badge-success', borderClass: 'border-success/40', order: 0 },
-            B: { title: 'B · 值得审核', badgeClass: 'badge-info', borderClass: 'border-info/40', order: 1 },
-            C: { title: 'C · 低优先级', badgeClass: 'badge-warning', borderClass: 'border-warning/40', order: 2 },
-            D: { title: 'D · 建议跳过', badgeClass: 'badge-ghost', borderClass: 'border-base-300', order: 3 },
-            '?': { title: '未评级', badgeClass: 'badge-ghost', borderClass: 'border-base-300', order: 4 },
-        };
-        const candidateTime = (item) => {
-            const raw = item.publish_time || item.modified || '';
-            const t = Date.parse(raw);
-            return Number.isFinite(t) ? t : 0;
-        };
-        const candidateGroups = computed(() => {
-            const map = {};
-            for(const item of candidates.value || []) {
-                const tier = item.quality_tier || '?';
-                if(!map[tier]) map[tier] = [];
-                map[tier].push(item);
-            }
-            return Object.entries(map)
-                .map(([tier, items]) => {
-                    items.sort((a,b) => candidateTime(b) - candidateTime(a));
-                    const meta = tierMeta[tier] || tierMeta['?'];
-                    return { tier, items, ...meta };
-                })
-                .sort((a,b) => (a.order ?? 9) - (b.order ?? 9));
-        });
-        const tierBadgeClass = (tier) => (tierMeta[tier] || tierMeta['?']).badgeClass;
-        const tierLabel = (tier) => (tierMeta[tier] || tierMeta['?']).title.replace(/^. · /, '');
-        const tierCardClass = (tier) => {
-            if(tier === 'A') return 'bg-success/5 border-success/30';
-            if(tier === 'B') return 'bg-info/5 border-info/30';
-            if(tier === 'C') return 'bg-warning/5 border-warning/30';
-            return 'bg-base-200 border-base-300';
-        };
-        const formatCandidateDate = (item) => {
-            const raw = item.publish_time || item.modified || '';
-            const d = new Date(raw);
-            if(Number.isNaN(d.getTime())) return raw || '无日期';
-            return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
-        };
+        const candidateGroups = computed(() => KBCandidates.buildCandidateGroups(candidates.value));
+        const tierBadgeClass = (tier) => KBCandidates.tierBadgeClass(tier);
+        const tierLabel = (tier) => KBCandidates.tierLabel(tier);
+        const tierCardClass = (tier) => KBCandidates.tierCardClass(tier);
+        const formatCandidateDate = (item) => KBCandidates.formatCandidateDate(item);
         const candidateContext = {
             candidates,
             candidateSummary,

@@ -1107,3 +1107,58 @@ python3 scripts/processor.py --process-all
   - 文档预览 API 返回 `meta.llm_full_translation`。
   - 预览抽屉显示全文翻译 provider/model/target badge。
   - LLM audit 的 generation chain、summary count 和 CSV 导出纳入 full translation。
+
+## 2026-06-04 - Translation Backfill 执行（已暂停）
+
+### 背景
+6/2 审计发现 157 篇文档中 37 篇缺 opposite-language 译文（zh→en），去重后 33 篇需翻译。
+
+### 执行
+- 编写 `scripts/backfill_all_37.py`：带进度持久化的全量 wrapper，支持去重、中断续传、失败隔离
+- 模型：DeepSeek V4 Pro（`deepseek_pro`），`full_translation` flow，quality_first
+- Key 位置：`/home/sunoxi/.config/karpathy-kb/llm.env`，通过 systemd `EnvironmentFile` 注入
+
+### 结果
+| 指标 | 值 |
+|------|-----|
+| 总目标（去重后） | 23 篇 |
+| 已完成 | **21 篇** |
+| 失败 | 0 篇 |
+| 重复跳过 | 2 篇 |
+
+**分布：** articles/ 14 篇 + technologies/ 7 篇
+
+**耗时分析：** 小文档（<1Kch）20-55s/篇，中文档（3-9Kch）60-120s/篇，大文档（44Kch）659s
+
+### 瓶颈
+- DeepSeek V4 Pro API 响应慢，单篇最长 11 分钟
+- 进程多次 timeout 后按用户要求暂停
+
+### 进度文件
+- `~/karpathy-kb/data/backfill_progress.json` — 21 篇完成记录 + 耗时元数据
+- 续跑：`cd ~/karpathy-kb && export $(grep -v '^#' /home/sunoxi/.config/karpathy-kb/llm.env | xargs) && PYTHONUNBUFFERED=1 timeout 600 python3 scripts/backfill_all_37.py`
+
+### 剩余 15 篇
+- 🟡 7 篇（3.8K-9.3Kch）
+- 🔴 8 篇（11K-88Kch）
+
+### 期间问题：WebUI 重翻译按钮灰显（已解决）
+用户反馈导入文章后点预览，「重新翻译」按钮灰色（`:disabled="isRetranslating || !previewDocPath || isEditingDoc"`）。
+前后端代码审查发现：
+- 后端 `/api/translation/models` 返回两个模型均 `available: true`
+- 前端 `translationProvider` 初始 `local_gemma4`，加载后设为 `deepseek_pro`
+- `selectedTranslationModel` computed 正确匹配
+- `previewDoc` 第 5065 行正确设置 `previewDocPath.value = path`
+- 有可疑代码：`previewCandidate`（第 5874 行）在候选预览加载后清空 `previewDocPath.value = ''`
+- 但普通 `previewDoc` 能覆盖此值
+
+后续定位到真实根因：`previewDocPath` 和 `retranslateButtonTitle` 在 Vue `setup()` 中定义，但没有 return 给模板；模板里的 `!previewDocPath` 读到 `undefined` 后恒为 true，导致按钮一直 disabled。
+
+修复：
+- `scripts/web_ui.py`：在 Vue setup return 中暴露 `previewDocPath` 和 `retranslateButtonTitle`
+- `scripts/smoke_webui_audit.py`：增加静态 smoke 断言，防止重翻译 UI 依赖变量再次漏 return
+
+验证：
+- `python3 scripts/smoke_webui_audit.py` 通过
+- `karpathy-kb.service` 已重启
+- `/api/translation/models` 确认 DeepSeek Pro + Local Gemma4 均 available

@@ -1,0 +1,181 @@
+{
+  "started_at": "2026-06-04T04:11:08.912899+00:00",
+  "completed_at": null,
+  "total": 23,
+  "done": [
+    "articles/AI 智能体AI Agent是什么_a2c11069.md",
+    "articles/AINews 今日无重大进展_ad79eb52.md",
+    "articles/AINews 硅谷开始认真对待服务Services_26ca6b8a.md",
+    "articles/ChatGPT 中广告测试_92ccddb1.md",
+    "articles/ChatGPT如何在保护隐私的同时学习世界知识_88faa7ee.md",
+    "articles/Claude 用于创意工作_f717be0a.md",
+    "articles/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md",
+    "articles/LLM 研究中的开放性挑战_50950c2d.md",
+    "articles/Simplex 利用 Codex 重新思考软件开发_aece2a8e.md",
+    "articles/Uber 利用 OpenAI 帮助人们更智能地赚钱和更快地预订_43bb08cd.md",
+    "articles/关于我们选举保障措施的更新_2c8e571c.md",
+    "articles/在 ChatGPT 中引入受信任联系人Trusted Contact_fe6cea82.md",
+    "articles/新的开放权重领导者大型AI的政治影响力疾病预测与更快的推理reasoning_6ebc7001.md",
+    "articles/金融服务领域的智能体Agents_8cf9eaff.md",
+    "technologies/DeepSeek-V4智能体Agent可以实际使用的百万级Token上下文_10fab584.md",
+    "technologies/AI 与网络安全未来开放性的重要性_23611a43.md",
+    "technologies/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md",
+    "technologies/从游戏到生物学及更远AlphaGo 10 年的影响_ee1e80c9.md",
+    "technologies/智能体可观测性 Agent Observability如何在生产环境中监控和评估 LLM Agent_8f946192.md",
+    "technologies/开放模型已跨越一个门槛_35daf98b.md",
+    "technologies/TCP传输性能调优从窗口调优到重传机制_261c2112.md"
+  ],
+  "failed": [],
+  "skipped_duplicates": [
+    "technologies/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md",
+    "technologies/这个51K星标的开源神器让任何Agent都能一键切换所有模型_5d7c1e01.md"
+  ],
+  "per_item": {
+    "articles/AI 智能体AI Agent是什么_a2c11069.md": {
+      "path": "articles/AI 智能体AI Agent是什么_a2c11069.md",
+      "title": "AI 智能体（AI Agent）是什么？",
+      "source_chars": 505,
+      "chunk_count": 1,
+      "elapsed_sec": 33.6,
+      "provider": "deepseek_pro"
+    },
+    "articles/AINews 今日无重大进展_ad79eb52.md": {
+      "path": "articles/AINews 今日无重大进展_ad79eb52.md",
+      "title": "[AINews] 今日无重大进展",
+      "source_chars": 457,
+      "chunk_count": 1,
+      "elapsed_sec": 48.0,
+      "provider": "deepseek_pro"
+    },
+    "articles/AINews 硅谷开始认真对待服务Services_26ca6b8a.md": {
+      "path": "articles/AINews 硅谷开始认真对待服务Services_26ca6b8a.md",
+      "title": "[AINews] 硅谷开始认真对待服务（Services）",
+      "source_chars": 632,
+      "chunk_count": 1,
+      "elapsed_sec": 41.3,
+      "provider": "deepseek_pro"
+    },
+    "articles/ChatGPT 中广告测试_92ccddb1.md": {
+      "path": "articles/ChatGPT 中广告测试_92ccddb1.md",
+      "title": "ChatGPT 中广告测试",
+      "source_chars": 637,
+      "chunk_count": 1,
+      "elapsed_sec": 26.4,
+      "provider": "deepseek_pro"
+    },
+    "articles/ChatGPT如何在保护隐私的同时学习世界知识_88faa7ee.md": {
+      "path": "articles/ChatGPT如何在保护隐私的同时学习世界知识_88faa7ee.md",
+      "title": "ChatGPT如何在保护隐私的同时学习世界知识",
+      "source_chars": 781,
+      "chunk_count": 1,
+      "elapsed_sec": 54.8,
+      "provider": "deepseek_pro"
+    },
+    "articles/Claude 用于创意工作_f717be0a.md": {
+      "path": "articles/Claude 用于创意工作_f717be0a.md",
+      "title": "Claude 用于创意工作",
+      "source_chars": 495,
+      "chunk_count": 1,
+      "elapsed_sec": 22.3,
+      "provider": "deepseek_pro"
+    },
+    "articles/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md": {
+      "path": "articles/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md",
+      "title": "EMO：为涌现的模块化进行专家混合（mixture of experts）预训练",
+      "source_chars": 686,
+      "chunk_count": 1,
+      "elapsed_sec": 22.9,
+      "provider": "deepseek_pro"
+    },
+    "articles/LLM 研究中的开放性挑战_50950c2d.md": {
+      "path": "articles/LLM 研究中的开放性挑战_50950c2d.md",
+      "title": "LLM 研究中的开放性挑战",
+      "source_chars": 44792,
+      "chunk_count": 14,
+      "elapsed_sec": 659.4,
+      "provider": "deepseek_pro"
+    },
+    "articles/Simplex 利用 Codex 重新思考软件开发_aece2a8e.md": {
+      "path": "articles/Simplex 利用 Codex 重新思考软件开发_aece2a8e.md",
+      "title": "Simplex 利用 Codex 重新思考软件开发",
+      "source_chars": 716,
+      "chunk_count": 1,
+      "elapsed_sec": 29.8,
+      "provider": "deepseek_pro"
+    },
+    "articles/Uber 利用 OpenAI 帮助人们更智能地赚钱和更快地预订_43bb08cd.md": {
+      "path": "articles/Uber 利用 OpenAI 帮助人们更智能地赚钱和更快地预订_43bb08cd.md",
+      "title": "Uber 利用 OpenAI 帮助人们更智能地赚钱和更快地预订",
+      "source_chars": 708,
+      "chunk_count": 1,
+      "elapsed_sec": 41.9,
+      "provider": "deepseek_pro"
+    },
+    "articles/关于我们选举保障措施的更新_2c8e571c.md": {
+      "path": "articles/关于我们选举保障措施的更新_2c8e571c.md",
+      "source_chars": 543,
+      "chunk_count": 1,
+      "elapsed_sec": 37.4
+    },
+    "articles/在 ChatGPT 中引入受信任联系人Trusted Contact_fe6cea82.md": {
+      "path": "articles/在 ChatGPT 中引入受信任联系人Trusted Contact_fe6cea82.md",
+      "source_chars": 741,
+      "chunk_count": 1,
+      "elapsed_sec": 41.6
+    },
+    "articles/新的开放权重领导者大型AI的政治影响力疾病预测与更快的推理reasoning_6ebc7001.md": {
+      "path": "articles/新的开放权重领导者大型AI的政治影响力疾病预测与更快的推理reasoning_6ebc7001.md",
+      "source_chars": 900,
+      "chunk_count": 1,
+      "elapsed_sec": 80.5
+    },
+    "articles/金融服务领域的智能体Agents_8cf9eaff.md": {
+      "path": "articles/金融服务领域的智能体Agents_8cf9eaff.md",
+      "source_chars": 499,
+      "chunk_count": 1,
+      "elapsed_sec": 34.8
+    },
+    "technologies/DeepSeek-V4智能体Agent可以实际使用的百万级Token上下文_10fab584.md": {
+      "path": "technologies/DeepSeek-V4智能体Agent可以实际使用的百万级Token上下文_10fab584.md",
+      "source_chars": 643,
+      "chunk_count": 1,
+      "elapsed_sec": 55.0
+    },
+    "technologies/AI 与网络安全未来开放性的重要性_23611a43.md": {
+      "path": "technologies/AI 与网络安全未来开放性的重要性_23611a43.md",
+      "source_chars": 681,
+      "chunk_count": 1,
+      "elapsed_sec": 35.0
+    },
+    "technologies/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md": {
+      "path": "technologies/EMO为涌现的模块化进行专家混合mixture of experts预训练_9cd374e7.md",
+      "source_chars": 686,
+      "chunk_count": 1,
+      "elapsed_sec": 50.4
+    },
+    "technologies/从游戏到生物学及更远AlphaGo 10 年的影响_ee1e80c9.md": {
+      "path": "technologies/从游戏到生物学及更远AlphaGo 10 年的影响_ee1e80c9.md",
+      "source_chars": 701,
+      "chunk_count": 1,
+      "elapsed_sec": 42.2
+    },
+    "technologies/智能体可观测性 Agent Observability如何在生产环境中监控和评估 LLM Agent_8f946192.md": {
+      "path": "technologies/智能体可观测性 Agent Observability如何在生产环境中监控和评估 LLM Agent_8f946192.md",
+      "source_chars": 927,
+      "chunk_count": 1,
+      "elapsed_sec": 27.1
+    },
+    "technologies/开放模型已跨越一个门槛_35daf98b.md": {
+      "path": "technologies/开放模型已跨越一个门槛_35daf98b.md",
+      "source_chars": 973,
+      "chunk_count": 1,
+      "elapsed_sec": 44.3
+    },
+    "technologies/TCP传输性能调优从窗口调优到重传机制_261c2112.md": {
+      "path": "technologies/TCP传输性能调优从窗口调优到重传机制_261c2112.md",
+      "source_chars": 3275,
+      "chunk_count": 1,
+      "elapsed_sec": 59.8
+    }
+  }
+}

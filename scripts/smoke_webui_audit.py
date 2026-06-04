@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -132,6 +133,14 @@ def main() -> int:
             "isEditingDoc",
         ]:
             _assert(token in webui_source, f"retranslation source missing token: {token}")
+        setup_match = re.search(r"return \{(?P<body>[\s\S]+?)\n\s*\};\n\s*\}\n\s*\}\)\.mount", webui_source)
+        _assert(setup_match is not None, "could not locate Vue setup return block")
+        setup_return = setup_match.group("body")
+        for token in [
+            "previewDocPath",
+            "retranslateButtonTitle",
+        ]:
+            _assert(token in setup_return, f"Vue setup return missing token used by retranslation UI: {token}")
 
         # Verify _strip_translated_meta strips the legacy translation footer
         from web_ui import _strip_translated_meta

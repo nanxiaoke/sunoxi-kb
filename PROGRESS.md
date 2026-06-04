@@ -1652,3 +1652,30 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 设置页 API action 和 Provider/Flow 编辑辅助逻辑都已进入 `settings.js`。
 - `app.js` 中剩余最大独立块主要是图谱渲染、聊天/预览基础逻辑，以及少量全局 UI glue。
+
+## 2026-06-04 - WebUI 重构第十五阶段：聊天模块化
+
+### 目标
+继续拆分低风险前端逻辑，把智能问答相关 action 从 `app.js` 迁移到独立模块。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/chat.js`：
+  - `KBChat.scrollToBottom`
+  - `KBChat.ask`
+  - `KBChat.submitChat`
+- 聊天请求、用户/AI 消息追加、等待状态、滚动到底、错误提示迁移到 `chat.js`。
+- `app.js` 中聊天相关函数改为薄 wrapper。
+- 模板新增 `/webui/static/js/modules/chat.js` 加载，继续保持无构建链。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/chat.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/chat.js` 均 200。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `chat.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 聊天 action 已进入 `chat.js`。
+- `app.js` 中剩余最大独立块主要是图谱渲染、文档预览基础逻辑和少量全局 UI glue。

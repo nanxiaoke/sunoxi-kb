@@ -229,49 +229,18 @@ createApp({
         const isWaiting = ref(false);
         const chatAnswerMode = ref(localStorage.getItem('kb_chat_answer_mode') || 'extractive');
         watch(chatAnswerMode, (v) => localStorage.setItem('kb_chat_answer_mode', v));
-        
-        const scrollToBottom = () => {
-            nextTick(() => {
-                const container = document.getElementById('chat-container');
-                if (container) container.scrollTop = container.scrollHeight;
-            });
+        const chatContext = {
+            chatAnswerMode,
+            chatHistory,
+            chatInput,
+            isWaiting,
+            nextTick,
+            showToast
         };
-
-        const ask = (text) => { chatInput.value = text; submitChat(); };
-        
+        const scrollToBottom = () => KBChat.scrollToBottom(chatContext);
+        const ask = (text) => KBChat.ask(chatContext, text);
         const submitChat = async () => {
-            const q = chatInput.value.trim();
-            if(!q) return;
-            
-            chatHistory.value.push({ role: 'user', content: q, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
-            chatInput.value = '';
-            isWaiting.value = true;
-            scrollToBottom();
-            
-            try {
-                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&qa=true&answer_mode=${encodeURIComponent(chatAnswerMode.value)}`);
-                const data = await res.json();
-                
-                chatHistory.value.push({
-                    role: 'ai',
-                    content: data.answer || "未能生成答案。",
-                    sources: data.documents || [],
-                    citations: data.citations || [],
-                    latency: data.latency,
-                    cache_hit: data.cache_hit,
-                    context_preview: data.context_preview,
-                    diagnostics: data.diagnostics || {},
-                    answer_mode: data.answer_mode,
-                    llm: data.llm,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-                });
-            } catch (e) {
-                showToast("问答请求失败", "error");
-                chatHistory.value.push({ role: 'ai', content: "系统内部错误，无法连接到模型。" });
-            } finally {
-                isWaiting.value = false;
-                scrollToBottom();
-            }
+            await KBChat.submitChat(chatContext);
         };
 
         // --- Document Preview Drawer ---

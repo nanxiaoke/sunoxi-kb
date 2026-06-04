@@ -1353,3 +1353,31 @@ python3 scripts/processor.py --process-all
 ### 下一阶段建议
 - 继续拆文档管理和候选池模块，这两块体量更大，需要按 action/view model 分批迁移。
 - 后端可并行规划 Flask Blueprint 拆分，但建议等前端主流程模块边界稳定后再动后端路由域。
+
+## 2026-06-04 - WebUI 重构第五阶段：维护与知识关联动作模块化
+
+### 目标
+继续拆 `app.js` 中低风险的 action 类逻辑，优先迁移不涉及 DOM 图谱渲染的大块 API 流程。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/maintenance.js`：
+  - `KBMaintenance.loadAssociations`
+  - `KBMaintenance.runMaintenance`
+  - `KBMaintenance.repairDocQuality`
+  - `KBMaintenance.repairAllQuality`
+- `app.js` 新增 `maintenanceContext`，集中注入维护、质量修复、关联报告所需状态与 helper。
+- 维护知识库、重建关联报告、单篇质量修复、批量质量修复从 `app.js` 内联流程改为调用 `KBMaintenance`。
+- `index.html` 新增 `/webui/static/js/modules/maintenance.js` 加载。
+- `scripts/smoke_webui_audit.py` 增加 `maintenance.js` 和 `KBMaintenance` 的静态断言。
+
+### 验证
+- `node --check` 覆盖 `api.js`、`linkQuality.js`、`retranslate.js`、`settings.js`、`maintenance.js`、`app.js`，全部通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/maintenance.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `maintenance.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置、维护/质量修复/关联报告。
+- 图谱渲染和文档/候选池仍在 `app.js`，建议继续按 action/view model 分批迁移。

@@ -762,6 +762,22 @@ createApp({
         };
         const issueLabel = (issue) => qualityIssueLabels[issue] || issue;
         const issueText = (issues) => (issues || []).map(issueLabel).join(' / ');
+        const maintenanceContext = {
+            activeTab,
+            associationReport,
+            isMaintaining,
+            loadingAssociations,
+            maintenanceReport,
+            previewDocPath,
+            qualityBadCount,
+            repairingQuality,
+            issueText,
+            nextTick,
+            showToast,
+            initGraph: (...args) => initGraph(...args),
+            loadDocs: (...args) => loadDocs(...args),
+            previewDoc: (...args) => previewDoc(...args)
+        };
 
         const loadDocs = async () => {
             loadingDocs.value = true;
@@ -850,66 +866,11 @@ createApp({
         });
 
         const repairDocQuality = async (path) => {
-            repairingQuality.value = true;
-            try {
-                const previewRes = await fetch(`/api/documents/${encodeURIComponent(path)}/repair-quality`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dry_run: true })
-                });
-                const preview = await previewRes.json();
-                if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
-                if(!preview.changed) {
-                    showToast('文档无需修复', 'info');
-                    return;
-                }
-                const planned = issueText(preview.before?.issues || []);
-                const summaryPreview = (preview.sections?.summary || '').slice(0, 160);
-                if(!confirm(`确认应用质量修复？\n文档：${path}\n问题：${planned || '未知'}\n摘要预览：${summaryPreview}`)) return;
-                const res = await fetch(`/api/documents/${encodeURIComponent(path)}/repair-quality`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dry_run: false })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(data.changed ? '文档质量已修复' : '文档无需修复', data.changed ? 'success' : 'info');
-                await loadDocs();
-                if(previewDocPath.value === path) await previewDoc(path);
-            } catch(e) {
-                showToast(`质量修复失败: ${e.message}`, 'error');
-            } finally { repairingQuality.value = false; }
+            await KBMaintenance.repairDocQuality(maintenanceContext, path);
         };
 
         const repairAllQuality = async () => {
-            if(!qualityBadCount.value) return;
-            repairingQuality.value = true;
-            try {
-                const previewRes = await fetch('/api/quality/repair', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 50, dry_run: true })
-                });
-                const preview = await previewRes.json();
-                if(!previewRes.ok) throw new Error(preview.error || `HTTP ${previewRes.status}`);
-                const sample = (preview.results || []).slice(0, 5).map(x => `${x.path}: ${issueText(x.before?.issues || [])}`).join('\n');
-                if(!preview.planned) {
-                    showToast('没有需要修复的文档', 'info');
-                    return;
-                }
-                if(!confirm(`确认批量应用质量修复？\n计划修复：${preview.planned} 篇\n\n${sample}`)) return;
-                const res = await fetch('/api/quality/repair', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 50, dry_run: false })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(`已修复 ${data.repaired || 0} 个文档`, 'success');
-                await loadDocs();
-            } catch(e) {
-                showToast(`批量修复失败: ${e.message}`, 'error');
-            } finally { repairingQuality.value = false; }
+            await KBMaintenance.repairAllQuality(maintenanceContext);
         };
 
         const loadRssFeeds = async () => {
@@ -1373,30 +1334,7 @@ createApp({
         };
 
         const runMaintenance = async () => {
-            if(isMaintaining.value) return;
-            isMaintaining.value = true;
-            maintenanceReport.value = null;
-            showToast('正在维护知识库：按当前 LLM 模式检查 / 重建链接 / lint / 索引...', 'info', 5000);
-            try {
-                const res = await fetch('/api/maintenance', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ update_embeddings: false })
-                });
-                const report = await res.json();
-                maintenanceReport.value = report;
-                const lint = report.summary?.lint || {};
-                const model = report.summary?.model || {};
-                const assoc = report.summary?.associations || {};
-                const msg = `维护完成：模型 ${model.model || 'local'} ${model.status || ''}，坏链 ${lint.broken_links ?? '?'}，孤立页 ${lint.orphans ?? '?'}，重复组 ${assoc.duplicate_groups ?? '?'}，真实文档 ${report.summary?.real_wiki_docs ?? '?'}`;
-                showToast(msg, report.status === 'ok' ? 'success' : 'warning', 6000);
-                await loadDocs();
-                if(activeTab.value === 'graph') await nextTick(() => initGraph());
-            } catch(e) {
-                showToast(`维护失败: ${e.message}`, 'error', 6000);
-            } finally {
-                isMaintaining.value = false;
-            }
+            await KBMaintenance.runMaintenance(maintenanceContext);
         };
 
         const deleteDoc = async (path) => {
@@ -1541,16 +1479,7 @@ createApp({
 
 
         const loadAssociations = async (rebuild=false) => {
-            loadingAssociations.value = true;
-            try {
-                const data = await KBApi.requestJson('/api/associations', { method: rebuild ? 'POST' : 'GET' });
-                associationReport.value = data;
-                if(rebuild) showToast('知识关联报告已重建', 'success');
-            } catch(e) {
-                showToast(`知识关联报告失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingAssociations.value = false;
-            }
+            await KBMaintenance.loadAssociations(maintenanceContext, rebuild);
         };
 
         // --- Knowledge Graph (ECharts) ---

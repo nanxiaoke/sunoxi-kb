@@ -49,6 +49,7 @@ def main() -> int:
         _assert("/webui/static/js/modules/settings.js" in html, "home should load settings module")
         _assert("/webui/static/js/modules/maintenance.js" in html, "home should load maintenance module")
         _assert("/webui/static/js/modules/documents.js" in html, "home should load documents module")
+        _assert("/webui/static/js/modules/candidates.js" in html, "home should load candidates module")
         _assert("/webui/static/js/app.js" in html, "home should load external WebUI app.js")
         web_ui_source = _webui_sources()
         for token in [
@@ -72,6 +73,7 @@ def main() -> int:
             "KBSettings",
             "KBMaintenance",
             "KBDocuments",
+            "KBCandidates",
             "补链优化队列",
         ]:
             _assert(token in web_ui_source, f"missing WebUI token: {token}")

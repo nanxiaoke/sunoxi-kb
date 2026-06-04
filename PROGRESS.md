@@ -1411,3 +1411,33 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置、维护/质量修复/关联报告、文档管理 action。
 - 下一阶段可继续拆候选池 action，或先拆文档过滤/分页 view model。
+
+## 2026-06-04 - WebUI 重构第七阶段：候选池基础动作模块化
+
+### 目标
+开始拆分候选池，但只迁移基础 API action，暂不迁移候选预览、审核编辑、队列导入等更复杂流程。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/candidates.js`：
+  - `KBCandidates.loadCandidates`
+  - `KBCandidates.translateCandidate`
+  - `KBCandidates.batchTranslatePreview`
+  - `KBCandidates.skipCandidate`
+  - `KBCandidates.restoreCandidate`
+- `app.js` 新增 `candidateContext`，集中注入候选列表、筛选、加载状态、翻译状态、预览模式和 toast。
+- 候选列表加载、单篇预翻译、批量预翻译、跳过候选、恢复候选从 `app.js` 内联流程改为调用 `KBCandidates`。
+- 保留 `sort=quality` 查询参数，确保候选池排序行为不变。
+- `index.html` 新增 `/webui/static/js/modules/candidates.js` 加载。
+- `scripts/smoke_webui_audit.py` 增加 `candidates.js` 和 `KBCandidates` 的静态断言。
+
+### 验证
+- `node --check` 覆盖全部前端模块和 `app.js`，通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/candidates.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `candidates.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置、维护/质量修复/关联报告、文档管理 action、候选池基础 action。
+- 候选预览、审核编辑、批量导入、候选导入仍在 `app.js`，建议下一阶段继续分小块迁移。

@@ -733,6 +733,20 @@ createApp({
             if(Number.isNaN(d.getTime())) return raw || '无日期';
             return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
         };
+        const candidateContext = {
+            candidates,
+            candidateSummary,
+            candidateTierFilter,
+            candidateTypeFilter,
+            candidateIncludeSkipped,
+            loadingCandidates,
+            translatingCandidateId,
+            batchTranslatingPreview,
+            previewMode,
+            showToast,
+            closePreview,
+            previewCandidate: (...args) => previewCandidate(...args)
+        };
         const wechatSources = ref([]);
         const loadingWechatSources = ref(false);
         const savingWechatSource = ref(false);
@@ -975,21 +989,7 @@ createApp({
         };
 
         const loadCandidates = async () => {
-            loadingCandidates.value = true;
-            try {
-                const params = new URLSearchParams({ sort: 'quality' });
-                if(candidateTierFilter.value) params.set('tier', candidateTierFilter.value);
-                if(candidateTypeFilter.value) params.set('type', candidateTypeFilter.value);
-                if(candidateIncludeSkipped.value) params.set('include_skipped', 'true');
-                const res = await fetch(`/api/candidates?${params.toString()}`);
-                const data = await res.json();
-                candidates.value = data.candidates || [];
-                candidateSummary.value = data.summary || null;
-            } catch(e) {
-                showToast('加载候选池失败', 'error');
-            } finally {
-                loadingCandidates.value = false;
-            }
+            await KBCandidates.loadCandidates(candidateContext);
         };
 
         const previewCandidate = async (id) => {
@@ -1057,46 +1057,11 @@ createApp({
         };
 
         const translateCandidate = async (id, options={}) => {
-            if(!id) return;
-            translatingCandidateId.value = id;
-            showToast('正在生成候选池中文预览...', 'info', 5000);
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(id)}/translate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ force: false, preview: true })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '预翻译失败');
-                showToast('中文预览已生成，质量评分会优先使用中文内容', 'success', 5000);
-                await loadCandidates();
-                if(options.refreshPreview) await previewCandidate(id);
-            } catch(e) {
-                showToast(`预翻译失败: ${e.message}`, 'error', 6000);
-            } finally {
-                translatingCandidateId.value = '';
-            }
+            await KBCandidates.translateCandidate(candidateContext, id, options);
         };
 
         const batchTranslatePreview = async () => {
-            if(!confirm('批量补齐当前筛选条件下最多20篇候选的中文预览？')) return;
-            batchTranslatingPreview.value = true;
-            showToast('正在批量生成中文预览...', 'info', 6000);
-            try {
-                const res = await fetch('/api/candidates/translate-preview', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 20, tier: candidateTierFilter.value, type: candidateTypeFilter.value, force: false })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '批量预翻译失败');
-                showToast(`批量预翻译完成：${data.translated || 0} 篇，失败 ${data.failed?.length || 0} 篇`, 'success', 7000);
-                await loadCandidates();
-            } catch(e) {
-                showToast(`批量预翻译失败: ${e.message}`, 'error', 8000);
-            } finally {
-                batchTranslatingPreview.value = false;
-            }
+            await KBCandidates.batchTranslatePreview(candidateContext);
         };
 
         const editCandidate = (item) => {
@@ -1272,33 +1237,11 @@ createApp({
         };
 
         const skipCandidate = async (id) => {
-            const reason = prompt('跳过原因（可选）', '不导入');
-            if(reason === null) return;
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(id)}/skip`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ reason })
-                });
-                if(!res.ok) throw new Error(`HTTP ${res.status}`);
-                showToast('已跳过候选', 'success');
-                if(previewMode.value === 'candidate') closePreview();
-                await loadCandidates();
-            } catch(e) {
-                showToast(`跳过失败: ${e.message}`, 'error');
-            }
+            await KBCandidates.skipCandidate(candidateContext, id);
         };
 
         const restoreCandidate = async (id) => {
-            if(!confirm('恢复这个已跳过候选？恢复后会重新出现在默认候选池。')) return;
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(id)}/restore`, { method: 'POST' });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(data.restored ? '已恢复候选' : (data.message || '候选无需恢复'), data.restored ? 'success' : 'info');
-                await loadCandidates();
-            } catch(e) {
-                showToast(`恢复失败: ${e.message}`, 'error');
-            }
+            await KBCandidates.restoreCandidate(candidateContext, id);
         };
 
         const openLastImportedDoc = async () => {

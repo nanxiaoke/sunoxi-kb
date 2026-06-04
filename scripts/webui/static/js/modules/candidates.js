@@ -1,4 +1,6 @@
 (function (global) {
+    let batchImportPollTimer = null;
+
     async function loadCandidates(ctx) {
         if (ctx.loadingCandidates.value) return;
         ctx.loadingCandidates.value = true;
@@ -153,16 +155,134 @@
         }
     }
 
+    async function loadBatchImportStatus(ctx) {
+        const job = await KBApi.getJson('/api/candidates/batch-import/status');
+        ctx.batchImportJob.value = job;
+        ctx.batchImportingA.value = !!job.running;
+        return job;
+    }
+
+    function startBatchImportPolling(ctx) {
+        if (batchImportPollTimer) clearInterval(batchImportPollTimer);
+        batchImportPollTimer = setInterval(async () => {
+            try {
+                const job = await loadBatchImportStatus(ctx);
+                if (!job.running) {
+                    clearInterval(batchImportPollTimer);
+                    batchImportPollTimer = null;
+                    if (job.status === 'done') {
+                        const result = job.result || {};
+                        const maint = result.maintenance?.status ? `，维护状态：${result.maintenance.status}` : '';
+                        ctx.showToast(`队列导入完成: ${result.imported || 0}/${result.total || 0} 成功，失败 ${result.errors || 0}${maint}`, 'success', 10000);
+                        await loadCandidates(ctx);
+                    } else if (job.status === 'error') {
+                        ctx.showToast(`队列导入失败: ${job.error || '未知错误'}`, 'error', 10000);
+                    }
+                }
+            } catch (e) {
+                // Polling should stay quiet unless the final job reports an error.
+            }
+        }, 5000);
+    }
+
+    async function batchImportA(ctx) {
+        const limit = Math.max(1, Math.min(Number(ctx.batchImportLimit.value) || 20, 200));
+        const maxRetries = Math.max(0, Math.min(Number(ctx.batchImportRetries.value) || 0, 5));
+        if (!confirm(`确认启动 A 级候选队列导入？\n数量：${limit} 篇\n失败自动重试：${maxRetries} 次\n完成后统一跑轻量维护（不重建语义向量）。`)) return;
+        ctx.batchImportingA.value = true;
+        ctx.showToast('队列导入任务已提交，后台串行处理，可在进度卡片查看状态。', 'info', 10000);
+        try {
+            const data = await KBApi.sendJson(
+                '/api/candidates/batch-import',
+                {
+                    tier: 'A',
+                    limit,
+                    max_retries: maxRetries,
+                    retry_delay_sec: 10,
+                    run_maintenance: true,
+                    update_embeddings: false
+                },
+                { method: 'POST' }
+            );
+            ctx.batchImportJob.value = data.job || { status: 'started', running: true };
+            startBatchImportPolling(ctx);
+        } catch (e) {
+            ctx.batchImportingA.value = false;
+            ctx.showToast(`队列导入启动失败: ${e.message}`, 'error', 9000);
+        }
+    }
+
+    async function batchSkipLowQuality(ctx) {
+        const tier = ctx.candidateTierFilter.value || 'C,D';
+        if (!confirm(`将批量跳过当前来源过滤下的 ${tier || 'C,D'} 候选。此操作可在 candidate_state.json 中追溯，但会从默认候选池隐藏。继续？`)) return;
+        const code = prompt('二次确认：请输入 SKIP_LOW_QUALITY');
+        if (code !== 'SKIP_LOW_QUALITY') {
+            ctx.showToast('确认码不匹配，已取消', 'info');
+            return;
+        }
+        ctx.batchSkippingCandidates.value = true;
+        try {
+            const data = await KBApi.sendJson(
+                '/api/candidates/batch-skip',
+                {
+                    tier,
+                    type: ctx.candidateTypeFilter.value,
+                    confirm: code,
+                    reason: 'WebUI批量跳过低质量候选'
+                },
+                { method: 'POST' }
+            );
+            ctx.showToast(`已批量跳过 ${data.skipped || 0} 篇候选`, 'success', 7000);
+            await loadCandidates(ctx);
+        } catch (e) {
+            ctx.showToast(`批量跳过失败: ${e.message}`, 'error', 8000);
+        } finally {
+            ctx.batchSkippingCandidates.value = false;
+        }
+    }
+
+    async function importCandidate(ctx, id) {
+        if (!confirm('确认导入这篇候选文章？A/B候选会复用/生成中文译文，并自动维护知识库。')) return;
+        ctx.importingCandidateId.value = id;
+        ctx.showToast('正在导入候选文章，可能会生成全文译文并维护知识库...', 'info', 6000);
+        try {
+            const data = await KBApi.sendJson(
+                `/api/candidates/${encodeURIComponent(id)}/import`,
+                { process: true, run_maintenance: true, translate: true },
+                { method: 'POST' }
+            );
+            const wikiPath = data.wiki_path || data.processed?.wiki_path || '';
+            const searchQuery = (data.validation?.checks?.edited_title_applied && data.validation?.path)
+                ? data.validation.path
+                : (wikiPath ? wikiPath.split('/').pop().replace(/_[a-f0-9]{8}\.md$/, '').replace(/\.md$/, '') : '');
+            ctx.lastImportResult.value = { ...data, wiki_path: wikiPath, search_query: searchQuery };
+            if (ctx.previewMode.value === 'candidate') ctx.closePreview();
+            ctx.showToast('候选文章已导入知识库，可继续查看文档/搜索验证', 'success', 8000);
+            await loadCandidates(ctx);
+            await ctx.loadDocs();
+            ctx.stats.value = await KBApi.getJson('/api/stats');
+        } catch (e) {
+            ctx.showToast(`导入失败: ${e.message}`, 'error', 8000);
+        } finally {
+            ctx.importingCandidateId.value = '';
+        }
+    }
+
     global.KBCandidates = {
         batchTranslatePreview,
+        batchImportA,
+        batchSkipLowQuality,
         closeCandidateEdit,
         editCandidate,
+        importCandidate,
+        loadBatchImportStatus,
         loadCandidates,
         restoreCandidate,
         saveCandidateEdit,
         saveCandidateReviewInline,
         setCandidateEditForm,
         skipCandidate,
+        startBatchImportPolling,
         translateCandidate
     };
 })(window);

@@ -685,7 +685,6 @@ createApp({
         const batchImportLimit = ref(20);
         const batchImportRetries = ref(2);
         const batchImportJob = ref(null);
-        let batchImportPollTimer = null;
         const candidateEditOpen = ref(false);
         const savingCandidateEdit = ref(false);
         const candidateEditItem = ref(null);
@@ -740,16 +739,25 @@ createApp({
             candidateTypeFilter,
             candidateIncludeSkipped,
             loadingCandidates,
+            importingCandidateId,
             translatingCandidateId,
             batchTranslatingPreview,
+            batchSkippingCandidates,
+            batchImportingA,
+            batchImportLimit,
+            batchImportRetries,
+            batchImportJob,
             candidateEditOpen,
             savingCandidateEdit,
             candidateEditItem,
             candidateEditOriginalTitle,
             candidateEditForm,
+            lastImportResult,
+            stats,
             previewMode,
             showToast,
             closePreview,
+            loadDocs: (...args) => loadDocs(...args),
             previewCandidate: (...args) => previewCandidate(...args)
         };
         const wechatSources = ref([]);
@@ -1080,106 +1088,23 @@ createApp({
         };
 
         const loadBatchImportStatus = async () => {
-            const res = await fetch('/api/candidates/batch-import/status');
-            const job = await res.json();
-            batchImportJob.value = job;
-            batchImportingA.value = !!job.running;
-            return job;
+            return KBCandidates.loadBatchImportStatus(candidateContext);
         };
 
         const startBatchImportPolling = () => {
-            if(batchImportPollTimer) clearInterval(batchImportPollTimer);
-            batchImportPollTimer = setInterval(async () => {
-                try {
-                    const job = await loadBatchImportStatus();
-                    if(!job.running) {
-                        clearInterval(batchImportPollTimer);
-                        batchImportPollTimer = null;
-                        if(job.status === 'done') {
-                            const result = job.result || {};
-                            const maint = result.maintenance?.status ? `，维护状态：${result.maintenance.status}` : '';
-                            showToast(`队列导入完成: ${result.imported || 0}/${result.total || 0} 成功，失败 ${result.errors || 0}${maint}`, 'success', 10000);
-                            await loadCandidates();
-                        } else if(job.status === 'error') {
-                            showToast(`队列导入失败: ${job.error || '未知错误'}`, 'error', 10000);
-                        }
-                    }
-                } catch(e) {}
-            }, 5000);
+            KBCandidates.startBatchImportPolling(candidateContext);
         };
 
         const batchImportA = async () => {
-            const limit = Math.max(1, Math.min(Number(batchImportLimit.value) || 20, 200));
-            const maxRetries = Math.max(0, Math.min(Number(batchImportRetries.value) || 0, 5));
-            if(!confirm(`确认启动 A 级候选队列导入？\n数量：${limit} 篇\n失败自动重试：${maxRetries} 次\n完成后统一跑轻量维护（不重建语义向量）。`)) return;
-            batchImportingA.value = true;
-            showToast('队列导入任务已提交，后台串行处理，可在进度卡片查看状态。', 'info', 10000);
-            try {
-                const res = await fetch('/api/candidates/batch-import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tier: 'A', limit, max_retries: maxRetries, retry_delay_sec: 10, run_maintenance: true, update_embeddings: false })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                batchImportJob.value = data.job || { status: 'started', running: true };
-                startBatchImportPolling();
-            } catch(e) {
-                batchImportingA.value = false;
-                showToast(`队列导入启动失败: ${e.message}`, 'error', 9000);
-            }
+            await KBCandidates.batchImportA(candidateContext);
         };
 
         const batchSkipLowQuality = async () => {
-            const tier = candidateTierFilter.value || 'C,D';
-            if(!confirm(`将批量跳过当前来源过滤下的 ${tier || 'C,D'} 候选。此操作可在 candidate_state.json 中追溯，但会从默认候选池隐藏。继续？`)) return;
-            const code = prompt('二次确认：请输入 SKIP_LOW_QUALITY');
-            if(code !== 'SKIP_LOW_QUALITY') {
-                showToast('确认码不匹配，已取消', 'info');
-                return;
-            }
-            batchSkippingCandidates.value = true;
-            try {
-                const res = await fetch('/api/candidates/batch-skip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tier, type: candidateTypeFilter.value, confirm: code, reason: 'WebUI批量跳过低质量候选' })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || '批量跳过失败');
-                showToast(`已批量跳过 ${data.skipped || 0} 篇候选`, 'success', 7000);
-                await loadCandidates();
-            } catch(e) {
-                showToast(`批量跳过失败: ${e.message}`, 'error', 8000);
-            } finally {
-                batchSkippingCandidates.value = false;
-            }
+            await KBCandidates.batchSkipLowQuality(candidateContext);
         };
 
         const importCandidate = async (id) => {
-            if(!confirm('确认导入这篇候选文章？A/B候选会复用/生成中文译文，并自动维护知识库。')) return;
-            importingCandidateId.value = id;
-            showToast('正在导入候选文章，可能会生成全文译文并维护知识库...', 'info', 6000);
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(id)}/import`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ process: true, run_maintenance: true, translate: true })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                const wikiPath = data.wiki_path || data.processed?.wiki_path || '';
-                const searchQuery = (data.validation?.checks?.edited_title_applied && data.validation?.path) ? data.validation.path : (wikiPath ? wikiPath.split('/').pop().replace(/_[a-f0-9]{8}\.md$/, '').replace(/\.md$/, '') : '');
-                lastImportResult.value = { ...data, wiki_path: wikiPath, search_query: searchQuery };
-                if(previewMode.value === 'candidate') closePreview();
-                showToast('候选文章已导入知识库，可继续查看文档/搜索验证', 'success', 8000);
-                await loadCandidates();
-                await loadDocs();
-                stats.value = await fetch('/api/stats').then(r=>r.json());
-            } catch(e) {
-                showToast(`导入失败: ${e.message}`, 'error', 8000);
-            } finally {
-                importingCandidateId.value = '';
-            }
+            await KBCandidates.importCandidate(candidateContext, id);
         };
 
         const skipCandidate = async (id) => {

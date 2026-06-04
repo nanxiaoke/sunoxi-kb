@@ -1470,3 +1470,32 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 候选池的列表/翻译/跳过/恢复/审核编辑已模块化。
 - 候选预览内容构造、批量导入、候选导入和导入后闭环仍在 `app.js`。
+
+## 2026-06-04 - WebUI 重构第九阶段：候选导入与队列动作模块化
+
+### 目标
+继续迁移候选池剩余 action，将候选导入、批量导入队列、批量跳过低质量候选从 `app.js` 中抽离。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/candidates.js`：
+  - `KBCandidates.loadBatchImportStatus`
+  - `KBCandidates.startBatchImportPolling`
+  - `KBCandidates.batchImportA`
+  - `KBCandidates.batchSkipLowQuality`
+  - `KBCandidates.importCandidate`
+- 队列导入轮询定时器迁移到 `KBCandidates` 模块内部，避免 `app.js` 保存局部 timer 状态。
+- `candidateContext` 增加批量导入、批量跳过、导入状态、最近导入结果、文档刷新和 stats 刷新所需引用。
+- `app.js` 中候选队列状态加载、轮询、批量导入、批量跳过、单篇导入改为调用 `KBCandidates`。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/candidates.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/candidates.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `candidates.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 候选池 action 基本都已进入 `candidates.js`。
+- `app.js` 仍保留候选预览内容构造、导入后打开/搜索入口，以及候选分组/view model。

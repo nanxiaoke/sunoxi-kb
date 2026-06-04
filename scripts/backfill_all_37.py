@@ -205,6 +205,9 @@ def run(args: argparse.Namespace):
                 "elapsed_sec": round(elapsed, 1),
                 "provider": args.provider,
             }
+            progress["failed"] = [
+                p for p in progress["failed"] if Path(p).stem != Path(rel).stem and p != rel
+            ]
             progress["done"].append(rel)
             progress["per_item"][rel] = record
             print(f"  ✅ 完成 ({len(chunk_meta)} chunks, {elapsed:.1f}s)")
@@ -219,7 +222,8 @@ def run(args: argparse.Namespace):
                 "traceback": tb,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            progress["failed"].append(rel)
+            if rel not in progress["failed"]:
+                progress["failed"].append(rel)
             progress["per_item"][rel] = fail_record
             print(f"  ❌ 失败: {e}")
             save_progress(progress)

@@ -1,8 +1,8 @@
 {
   "started_at": "2026-06-04T04:11:08.912899+00:00",
-  "completed_at": null,
-  "total": 23,
-  "current_missing": 9,
+  "completed_at": "2026-06-04T17:42:37+00:00",
+  "total": 36,
+  "current_missing": 1,
   "done": [
     "articles/AI 智能体AI Agent是什么_a2c11069.md",
     "articles/AINews 今日无重大进展_ad79eb52.md",
@@ -31,7 +31,15 @@
     "articles/这个51K星标的开源神器让任何Agent都能一键切换所有模型_5d7c1e01.md",
     "articles/这个封装了我3年自媒体经验的AI热点网站今天向所有人免费开放_79e26071.md",
     "technologies/Anthropic 放出 Agent 终极答案别再写 Agent 框架了未来是 Agent OS 的_abcd456b.md",
-    "technologies/我挖到了Kimi K26Hermes的六个神技巧这下多Agent 24h组队干活真成了_aa61ad55.md"
+    "technologies/我挖到了Kimi K26Hermes的六个神技巧这下多Agent 24h组队干活真成了_aa61ad55.md",
+    "articles/搞完 Hermes 多 Agent 我才发现这根本不是技术活是管理活_37960cab.md",
+    "articles/构建生成式 AI 应用时常见的陷阱 Common pitfalls when building ge_c8ee75d8.md",
+    "articles/从研究 900 个最受欢迎的开源 AI 工具中学到的经验_004158a5.md",
+    "articles/预测人类偏好从模型排序到模型路由_23826db9.md",
+    "articles/生成配置temperaturetop-ktop-p 和测试时计算_d1406636.md",
+    "articles/多模态性与大型多模态模型 LMMs_03a53e8b.md",
+    "articles/智能体 Agents_69aaf3d6.md",
+    "articles/构建一个生成式 AI 平台 Building A Generative AI Platform_1201a05d.md"
   ],
   "failed": [],
   "skipped_duplicates": [
@@ -239,6 +247,70 @@
       "source_chars": 4825,
       "chunk_count": 3,
       "elapsed_sec": 157.0,
+      "provider": "deepseek_pro"
+    },
+    "articles/搞完 Hermes 多 Agent 我才发现这根本不是技术活是管理活_37960cab.md": {
+      "path": "articles/搞完 Hermes 多 Agent 我才发现这根本不是技术活是管理活_37960cab.md",
+      "title": "搞完 Hermes 多 Agent 我才发现，这根本不是技术活，是管理活",
+      "source_chars": 11064,
+      "chunk_count": 5,
+      "elapsed_sec": 279.9,
+      "provider": "deepseek_pro"
+    },
+    "articles/构建生成式 AI 应用时常见的陷阱 Common pitfalls when building ge_c8ee75d8.md": {
+      "path": "articles/构建生成式 AI 应用时常见的陷阱 Common pitfalls when building ge_c8ee75d8.md",
+      "title": "构建生成式 AI 应用时常见的陷阱 (Common pitfalls when building generative AI applications)",
+      "source_chars": 21186,
+      "chunk_count": 7,
+      "elapsed_sec": 427.2,
+      "provider": "deepseek_pro"
+    },
+    "articles/从研究 900 个最受欢迎的开源 AI 工具中学到的经验_004158a5.md": {
+      "path": "articles/从研究 900 个最受欢迎的开源 AI 工具中学到的经验_004158a5.md",
+      "title": "从研究 900 个最受欢迎的开源 AI 工具中学到的经验",
+      "source_chars": 23848,
+      "chunk_count": 8,
+      "elapsed_sec": 271.5,
+      "provider": "deepseek_pro"
+    },
+    "articles/预测人类偏好从模型排序到模型路由_23826db9.md": {
+      "path": "articles/预测人类偏好从模型排序到模型路由_23826db9.md",
+      "title": "预测人类偏好：从模型排序到模型路由",
+      "source_chars": 29422,
+      "chunk_count": 9,
+      "elapsed_sec": 361.0,
+      "provider": "deepseek_pro"
+    },
+    "articles/生成配置temperaturetop-ktop-p 和测试时计算_d1406636.md": {
+      "path": "articles/生成配置temperaturetop-ktop-p 和测试时计算_d1406636.md",
+      "title": "生成配置：temperature、top-k、top-p 和测试时计算",
+      "source_chars": 35838,
+      "chunk_count": 11,
+      "elapsed_sec": 583.1,
+      "provider": "deepseek_pro"
+    },
+    "articles/多模态性与大型多模态模型 LMMs_03a53e8b.md": {
+      "path": "articles/多模态性与大型多模态模型 LMMs_03a53e8b.md",
+      "title": "多模态性与大型多模态模型 (LMMs)",
+      "source_chars": 62611,
+      "chunk_count": 19,
+      "elapsed_sec": 831.5,
+      "provider": "deepseek_pro"
+    },
+    "articles/智能体 Agents_69aaf3d6.md": {
+      "path": "articles/智能体 Agents_69aaf3d6.md",
+      "title": "智能体 (Agents)",
+      "source_chars": 78889,
+      "chunk_count": 24,
+      "elapsed_sec": 1008.8,
+      "provider": "deepseek_pro"
+    },
+    "articles/构建一个生成式 AI 平台 Building A Generative AI Platform_1201a05d.md": {
+      "path": "articles/构建一个生成式 AI 平台 Building A Generative AI Platform_1201a05d.md",
+      "title": "构建一个生成式 AI 平台 (Building A Generative AI Platform)",
+      "source_chars": 88371,
+      "chunk_count": 26,
+      "elapsed_sec": 1212.1,
       "provider": "deepseek_pro"
     }
   }

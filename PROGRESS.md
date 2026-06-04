@@ -1313,3 +1313,43 @@ python3 scripts/processor.py --process-all
 ### 下一阶段建议
 - 继续拆 `app.js` 的文档管理、候选池、LLM 配置、知识关联 view/action 模块。
 - 等无构建模块边界稳定后，再评估是否迁移到 Vite/Vue SFC + TypeScript；短期不建议直接切换，以免破坏 Windows 一键启动体验。
+
+## 2026-06-04 - WebUI 重构第四阶段：设置与审计动作模块化
+
+### 目标
+继续拆分 `app.js` 中相对独立的配置/审计动作，把 API 调用、状态写回和 toast 处理从 Vue 主应用中抽离，进一步减少单文件复杂度。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/settings.js`：
+  - `KBSettings.loadWebuiConfig`
+  - `KBSettings.saveWebuiConfig`
+  - `KBSettings.loadLlmConfig`
+  - `KBSettings.saveLlmConfig`
+  - `KBSettings.setLlmMode`
+  - `KBSettings.loadLlmBackups`
+  - `KBSettings.loadLlmAudit`
+  - `KBSettings.llmAuditExportUrl`
+  - `KBSettings.loadTranslationBackfillAudit`
+  - `KBSettings.previewTranslationBackfillDryRun`
+  - `KBSettings.restoreLlmBackup`
+- `app.js` 新增 `settingsContext`，集中注入配置、审计、backfill、LLM mode 等状态和 helper。
+- `app.js` 中对应函数改成薄 wrapper，避免配置/审计 API 流程继续散落在主应用里。
+- `index.html` 新增 `/webui/static/js/modules/settings.js` 加载。
+- `scripts/smoke_webui_audit.py` 增加 `settings.js` 和 `KBSettings` 的静态断言。
+
+### 验证
+- `node --check` 覆盖 `api.js`、`linkQuality.js`、`retranslate.js`、`settings.js`、`app.js`，全部通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/settings.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `settings.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- `app.js` 进一步减少配置/审计 API 样板代码。
+- 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置四类能力。
+- 一条命令启动能力保持不变。
+
+### 下一阶段建议
+- 继续拆文档管理和候选池模块，这两块体量更大，需要按 action/view model 分批迁移。
+- 后端可并行规划 Flask Blueprint 拆分，但建议等前端主流程模块边界稳定后再动后端路由域。

@@ -131,36 +131,11 @@ createApp({
         }, { immediate: true, deep: true });
 
         const loadWebuiConfig = async () => {
-            loadingWebuiConfig.value = true;
-            try {
-                const data = await KBApi.getJson('/api/webui/config');
-                webuiConfig.value = {
-                    app: data.app || webuiConfig.value.app,
-                    features: data.features || webuiConfig.value.features,
-                    translation_policy: mergeTranslationPolicy(data.translation_policy || webuiConfig.value.translation_policy)
-                };
-            } catch(e) {
-                showToast(`加载系统设置失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingWebuiConfig.value = false;
-            }
+            await KBSettings.loadWebuiConfig(settingsContext);
         };
 
         const saveWebuiConfig = async () => {
-            savingWebuiConfig.value = true;
-            try {
-                const data = await KBApi.sendJson('/api/webui/config', webuiConfig.value, { method: 'PATCH' });
-                webuiConfig.value = {
-                    app: data.app || webuiConfig.value.app,
-                    features: data.features || webuiConfig.value.features,
-                    translation_policy: mergeTranslationPolicy(data.translation_policy || webuiConfig.value.translation_policy)
-                };
-                showToast('系统设置已保存', 'success');
-            } catch(e) {
-                showToast(`保存系统设置失败: ${e.message}`, 'error', 7000);
-            } finally {
-                savingWebuiConfig.value = false;
-            }
+            await KBSettings.saveWebuiConfig(settingsContext);
         };
 
         const saveAllSettings = async () => {
@@ -376,6 +351,33 @@ createApp({
             providers: Array.isArray(f.providers) ? f.providers.filter(Boolean) : [],
             new_provider: ''
         }));
+        const settingsContext = {
+            webuiConfig,
+            loadingWebuiConfig,
+            savingWebuiConfig,
+            mergeTranslationPolicy,
+            llmProviders,
+            llmFlows,
+            llmSecretSetup,
+            llmMode,
+            llmModeOptions,
+            settingLlmMode,
+            llmAudit,
+            llmAuditFilters,
+            loadingLlmAudit,
+            translationBackfillAudit,
+            translationBackfillDryRun,
+            loadingTranslationBackfill,
+            loadingLlmConfig,
+            savingLlmConfig,
+            restoringLlmBackup,
+            llmBackups,
+            llmModeLabel,
+            normalizeLlmProviders,
+            normalizeLlmFlows,
+            showToast,
+            loadTranslationModels: (...args) => loadTranslationModels(...args)
+        };
 
         const providerLabel = (name) => {
             const p = llmProviders.value.find(item => item.name === name);
@@ -593,121 +595,27 @@ createApp({
         const retranslateDoc = async () => KBRetranslate.runRetranslate(retranslateContext);
 
         const loadLlmConfig = async () => {
-            loadingLlmConfig.value = true;
-            try {
-                const data = await KBApi.getJson('/api/llm/config');
-                llmProviders.value = normalizeLlmProviders(data.providers);
-                llmFlows.value = normalizeLlmFlows(data.flows);
-                llmSecretSetup.value = data.secret_setup || null;
-                llmMode.value = data.mode || 'hybrid';
-                llmModeOptions.value = data.mode_options || llmModeOptions.value || [];
-                llmBackups.value = data.backups || llmBackups.value || [];
-            } catch(e) {
-                showToast(`加载模型配置失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingLlmConfig.value = false;
-            }
+            await KBSettings.loadLlmConfig(settingsContext);
         };
 
         const saveLlmConfig = async () => {
-            savingLlmConfig.value = true;
-            try {
-                const payload = {
-                    providers: llmProviders.value.map(p => ({
-                        name: p.name,
-                        type: p.type,
-                        label: p.label,
-                        model: p.model,
-                        base_url: p.base_url,
-                        api_key_env: p.api_key_env,
-                        timeout_sec: p.timeout_sec,
-                        options: p.options || {}
-                    })),
-                    flows: llmFlows.value.map(f => ({
-                        name: f.name,
-                        label: f.label,
-                        providers: f.providers || [],
-                        allow_fallback: !!f.allow_fallback,
-                        allow_online: !!f.allow_online,
-                        fallback_notice: f.fallback_notice,
-                        chunk_chars: f.chunk_chars,
-                        intent: f.intent,
-                        notes: f.notes,
-                        options: f.options || {}
-                    }))
-                };
-                const data = await KBApi.sendJson('/api/llm/config', payload, { method: 'PATCH' });
-                llmProviders.value = normalizeLlmProviders(data.providers);
-                llmFlows.value = normalizeLlmFlows(data.flows);
-                llmSecretSetup.value = data.secret_setup || llmSecretSetup.value;
-                llmMode.value = data.mode || llmMode.value;
-                llmModeOptions.value = data.mode_options || llmModeOptions.value;
-                llmBackups.value = data.backups || [];
-                await loadTranslationModels();
-                showToast(`模型配置已保存${data.backup ? '，已自动备份' : ''}`, 'success', 5000);
-            } catch(e) {
-                showToast(`保存模型配置失败: ${e.message}`, 'error', 8000);
-            } finally {
-                savingLlmConfig.value = false;
-            }
+            await KBSettings.saveLlmConfig(settingsContext);
         };
 
         const applyLlmConfigPayload = async (data) => {
-            llmProviders.value = normalizeLlmProviders(data.providers);
-            llmFlows.value = normalizeLlmFlows(data.flows);
-            llmSecretSetup.value = data.secret_setup || llmSecretSetup.value;
-            llmMode.value = data.mode || llmMode.value;
-            llmModeOptions.value = data.mode_options || llmModeOptions.value;
-            llmBackups.value = data.backups || [];
-            await loadTranslationModels();
+            await KBSettings.applyLlmConfigPayload(settingsContext, data);
         };
 
         const setLlmMode = async (mode) => {
-            if(!mode || settingLlmMode.value) return;
-            settingLlmMode.value = mode;
-            try {
-                const res = await fetch('/api/llm/mode', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode })
-                });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                await applyLlmConfigPayload(data);
-                showToast(`已切换部署模式：${llmModeLabel.value}${data.backup ? '，已自动备份' : ''}`, 'success', 5000);
-            } catch(e) {
-                showToast(`切换部署模式失败: ${e.message}`, 'error', 8000);
-            } finally {
-                settingLlmMode.value = '';
-            }
+            await KBSettings.setLlmMode(settingsContext, mode);
         };
 
         const loadLlmBackups = async () => {
-            try {
-                const data = await KBApi.getJson('/api/llm/config/backups');
-                llmBackups.value = data.backups || [];
-            } catch(e) {
-                showToast(`加载配置备份失败: ${e.message}`, 'error', 7000);
-            }
+            await KBSettings.loadLlmBackups(settingsContext);
         };
 
         const loadLlmAudit = async () => {
-            loadingLlmAudit.value = true;
-            try {
-                const params = new URLSearchParams();
-                Object.entries(llmAuditFilters).forEach(([key, value]) => {
-                    if(value) params.set(key, value === true ? 'true' : value);
-                });
-                const url = `/api/llm/audit${params.toString() ? `?${params}` : ''}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                llmAudit.value = data;
-            } catch(e) {
-                showToast(`加载 LLM 审计失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingLlmAudit.value = false;
-            }
+            await KBSettings.loadLlmAudit(settingsContext);
         };
 
         const resetLlmAuditFilters = async () => {
@@ -716,12 +624,7 @@ createApp({
         };
 
         const llmAuditExportUrl = (format) => {
-            const params = new URLSearchParams();
-            Object.entries(llmAuditFilters).forEach(([key, value]) => {
-                if(value) params.set(key, value === true ? 'true' : value);
-            });
-            params.set('format', format);
-            return `/api/llm/audit?${params.toString()}`;
+            return KBSettings.llmAuditExportUrl(settingsContext, format);
         };
 
         const exportLlmAudit = (format) => {
@@ -729,51 +632,15 @@ createApp({
         };
 
         const loadTranslationBackfillAudit = async () => {
-            loadingTranslationBackfill.value = true;
-            try {
-                const data = await KBApi.getJson('/api/translation/backfill?limit=8');
-                translationBackfillAudit.value = data;
-            } catch(e) {
-                showToast(`加载补译审计失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingTranslationBackfill.value = false;
-            }
+            await KBSettings.loadTranslationBackfillAudit(settingsContext);
         };
 
         const previewTranslationBackfillDryRun = async () => {
-            loadingTranslationBackfill.value = true;
-            try {
-                const data = await KBApi.sendJson('/api/translation/backfill', { limit: 8, dry_run: true }, { method: 'POST' });
-                translationBackfillDryRun.value = data;
-                translationBackfillAudit.value = data.audit || translationBackfillAudit.value;
-                showToast(`补译 dry-run：计划 ${data.planned || 0} 篇，已写入 ${data.applied || 0} 篇`, 'info', 5000);
-            } catch(e) {
-                showToast(`补译 dry-run 失败: ${e.message}`, 'error', 7000);
-            } finally {
-                loadingTranslationBackfill.value = false;
-            }
+            await KBSettings.previewTranslationBackfillDryRun(settingsContext);
         };
 
         const restoreLlmBackup = async (name) => {
-            if(!name || !confirm(`确认恢复配置备份 ${name}？当前配置会先自动备份。`)) return;
-            restoringLlmBackup.value = name;
-            try {
-                const res = await fetch(`/api/llm/config/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' });
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                llmProviders.value = normalizeLlmProviders(data.providers);
-                llmFlows.value = normalizeLlmFlows(data.flows);
-                llmSecretSetup.value = data.secret_setup || llmSecretSetup.value;
-                llmMode.value = data.mode || llmMode.value;
-                llmModeOptions.value = data.mode_options || llmModeOptions.value;
-                llmBackups.value = data.backups || [];
-                await loadTranslationModels();
-                showToast(`已恢复配置：${data.restored_from || name}`, 'success', 6000);
-            } catch(e) {
-                showToast(`恢复配置失败: ${e.message}`, 'error', 8000);
-            } finally {
-                restoringLlmBackup.value = '';
-            }
+            await KBSettings.restoreLlmBackup(settingsContext, name);
         };
 
         const testLlmProvider = async (provider) => {

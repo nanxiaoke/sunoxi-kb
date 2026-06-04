@@ -778,36 +778,20 @@ createApp({
             loadDocs: (...args) => loadDocs(...args),
             previewDoc: (...args) => previewDoc(...args)
         };
+        const documentsContext = {
+            docs,
+            failedImports,
+            fetchUrlError,
+            fetchUrlInput,
+            fetchUrlSuccess,
+            isFetchingUrl,
+            loadingDocs,
+            stats,
+            showToast
+        };
 
         const loadDocs = async () => {
-            loadingDocs.value = true;
-            try {
-                const [docRes, statRes] = await Promise.all([
-                    fetch('/api/documents'), fetch('/api/stats')
-                ]);
-                const rawDocs = (await docRes.json()).documents || [];
-                // Normalize API fields to UI fields
-                docs.value = rawDocs.map(d => {
-                    const relpath = d.path || d.relpath;
-                    const parts = relpath.split('/');
-                    const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
-                    return {
-                        relpath,
-                        name: d.name,
-                        type: d.category || d.type || folder || 'root',
-                        folder,
-                        generated: !!d.generated,
-                        quality: d.quality || { ok: true, issues: [], score: 100 },
-                        size: d.size_bytes || d.size || 0,
-                        mtime: new Date(d.modified || d.mtime || Date.now()).getTime() / 1000
-                    };
-                });
-                stats.value = await statRes.json();
-            } catch(e) {
-                showToast("获取文档列表失败", "error");
-            } finally {
-                loadingDocs.value = false;
-            }
+            await KBDocuments.loadDocs(documentsContext);
         };
 
         const filteredDocs = computed(() => {
@@ -1338,64 +1322,11 @@ createApp({
         };
 
         const deleteDoc = async (path) => {
-            if(!confirm(`确定删除 ${path} 及其处理产生的Wiki文件吗？`)) return;
-            try {
-                const res = await fetch(`/api/documents/${encodeURIComponent(path)}`, { method: 'DELETE' });
-                if(res.ok) {
-                    showToast("删除成功", "success");
-                    docs.value = docs.value.filter(d => d.relpath !== path);
-                    stats.value.wiki_documents = Math.max(0, (stats.value.wiki_documents || 1) - 1);
-                }
-            } catch(e) { showToast("删除失败", "error"); }
+            await KBDocuments.deleteDoc(documentsContext, path);
         };
 
         const fetchUrl = async () => {
-            const url = fetchUrlInput.value.trim();
-            if(!url) return;
-            // Validate URL client-side first
-            try {
-                const u = new URL(url);
-                if(!['http:', 'https:'].includes(u.protocol)) throw new Error('仅支持 http/https');
-            } catch(e) {
-                fetchUrlError.value = `URL 不合法: ${e.message}`;
-                showToast(`URL 不合法: ${e.message}`, 'error');
-                return;
-            }
-            isFetchingUrl.value = true;
-            fetchUrlError.value = '';
-            fetchUrlSuccess.value = false;
-            showToast(`正在抓取: ${url}`, 'info', 5000);
-            try {
-                const res = await fetch('/api/documents/url', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, auto_process: true })
-                });
-                const data = await res.json();
-                if(!res.ok) {
-                    throw new Error(data.error || `HTTP ${res.status}`);
-                }
-                if(data.processed) {
-                    fetchUrlSuccess.value = true;
-                    showToast('✅ 抓取并导入成功！', 'success');
-                    loadDocs();
-                } else {
-                    if(data.recovery?.can_retry) {
-                        failedImports.value.unshift({
-                            raw_path: data.recovery.raw_path || data.raw_path,
-                            error: data.message || data.recovery.error,
-                            recovery: data.recovery,
-                            retrying: false
-                        });
-                    }
-                    showToast(`❌ 抓取成功但处理失败: ${data.message || '未知错误'}`, 'warning');
-                }
-            } catch(e) {
-                fetchUrlError.value = e.message;
-                showToast(`抓取失败: ${e.message}`, 'error');
-            } finally {
-                isFetchingUrl.value = false;
-            }
+            await KBDocuments.fetchUrl(documentsContext);
         };
 
         const handleFileUpload = async (e) => {
@@ -1410,63 +1341,11 @@ createApp({
             await uploadFiles(files);
         };
         const uploadFiles = async (files) => {
-            showToast(`正在上传 ${files.length} 个文件...`, "info");
-            const summaries = [];
-            for(let i=0; i<files.length; i++) {
-                const fd = new FormData();
-                fd.append('files', files[i]);
-                try {
-                    const res = await fetch('/api/documents', { method: 'POST', body: fd });
-                    const data = await res.json();
-                    if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                    const processed = data.processed || [];
-                    for(const item of processed) {
-                        summaries.push(item);
-                        if(item.processed) {
-                            const model = item.llm?.provider ? ` · ${item.llm.provider} / ${item.llm.model || '-'}` : '';
-                            showToast(`已处理 ${item.filename}${model}`, 'success', 7000);
-                        } else {
-                            if(item.recovery?.can_retry) {
-                                failedImports.value.unshift({
-                                    raw_path: item.recovery.raw_path || item.raw_path,
-                                    filename: item.filename,
-                                    error: item.error || item.message,
-                                    recovery: item.recovery,
-                                    retrying: false
-                                });
-                            }
-                            showToast(`上传成功但处理失败 ${item.filename}: ${item.error || item.message || '未知错误'}`, 'warning', 9000);
-                        }
-                    }
-                } catch(e) {
-                    console.error("Upload error", e);
-                    showToast(`上传失败 ${files[i].name}: ${e.message}`, 'error', 9000);
-                }
-            }
-            if(!summaries.length) showToast("上传请求已发送", "success");
-            loadDocs();
+            await KBDocuments.uploadFiles(documentsContext, files);
         };
 
         const retryFailedImport = async (item) => {
-            if(!item?.raw_path || item.retrying) return;
-            item.retrying = true;
-            try {
-                const res = await fetch('/api/documents/retry-import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ raw_path: item.raw_path })
-                });
-                const data = await res.json();
-                if(!res.ok || !data.processed) throw new Error(data.error || data.message || `HTTP ${res.status}`);
-                failedImports.value = failedImports.value.filter(x => x !== item);
-                showToast(`重试处理成功: ${data.wiki_path || item.raw_path}`, 'success', 7000);
-                loadDocs();
-            } catch(e) {
-                item.error = e.message;
-                showToast(`重试处理失败: ${e.message}`, 'error', 9000);
-            } finally {
-                item.retrying = false;
-            }
+            await KBDocuments.retryFailedImport(documentsContext, item);
         };
 
         const formatBytes = (bytes) => {

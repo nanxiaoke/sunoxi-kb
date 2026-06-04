@@ -1381,3 +1381,33 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置、维护/质量修复/关联报告。
 - 图谱渲染和文档/候选池仍在 `app.js`，建议继续按 action/view model 分批迁移。
+
+## 2026-06-04 - WebUI 重构第六阶段：文档管理动作模块化
+
+### 目标
+开始拆分文档管理区域，但只迁移 API action，不改文档列表过滤、分页和文件夹 computed，降低对模板响应式结构的影响。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/documents.js`：
+  - `KBDocuments.loadDocs`
+  - `KBDocuments.deleteDoc`
+  - `KBDocuments.fetchUrl`
+  - `KBDocuments.uploadFiles`
+  - `KBDocuments.retryFailedImport`
+- `app.js` 新增 `documentsContext`，集中注入文档列表、统计、URL 抓取状态、失败导入队列和 toast。
+- 文档列表加载、删除文档、URL 抓取、文件上传、失败导入重试从 `app.js` 内联流程改为调用 `KBDocuments`。
+- 文档过滤、分页、文件夹树、质量摘要仍留在 `app.js`，避免一次性迁移过大。
+- `index.html` 新增 `/webui/static/js/modules/documents.js` 加载。
+- `scripts/smoke_webui_audit.py` 增加 `documents.js` 和 `KBDocuments` 的静态断言。
+
+### 验证
+- `node --check` 覆盖全部前端模块和 `app.js`，通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/documents.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `documents.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 前端模块已覆盖 API、链接质量、重翻译、系统/LLM 设置、维护/质量修复/关联报告、文档管理 action。
+- 下一阶段可继续拆候选池 action，或先拆文档过滤/分页 view model。

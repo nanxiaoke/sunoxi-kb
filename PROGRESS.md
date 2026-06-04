@@ -1137,6 +1137,8 @@ python3 scripts/processor.py --process-all
 ### 进度文件
 - `~/karpathy-kb/data/backfill_progress.json` — 21 篇完成记录 + 耗时元数据
 - 续跑：`cd ~/karpathy-kb && export $(grep -v '^#' /home/sunoxi/.config/karpathy-kb/llm.env | xargs) && PYTHONUNBUFFERED=1 timeout 600 python3 scripts/backfill_all_37.py`
+- 分阶段续跑（推荐先跑 7 篇中等文档）：`PYTHONUNBUFFERED=1 timeout 900 python3 scripts/backfill_all_37.py --max-chars 10000`
+- 只查看计划不调用模型：`python3 scripts/backfill_all_37.py --status-only --max-chars 10000`
 
 ### 剩余 15 篇
 - 🟡 7 篇（3.8K-9.3Kch）

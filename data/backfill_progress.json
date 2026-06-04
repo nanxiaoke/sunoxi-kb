@@ -2,6 +2,7 @@
   "started_at": "2026-06-04T04:11:08.912899+00:00",
   "completed_at": null,
   "total": 23,
+  "current_missing": 15,
   "done": [
     "articles/AI 智能体AI Agent是什么_a2c11069.md",
     "articles/AINews 今日无重大进展_ad79eb52.md",

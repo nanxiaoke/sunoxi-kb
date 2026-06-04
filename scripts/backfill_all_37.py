@@ -8,6 +8,7 @@
 - 日志记录每篇的 token 消耗、耗时
 """
 
+import argparse
 import json
 import sys
 import time
@@ -20,7 +21,6 @@ sys.path.insert(0, str(KB_DIR / "scripts"))
 
 from translation_backfill import (
     audit_backfill,
-    run_backfill,
     split_frontmatter,
     write_frontmatter,
     source_text_for,
@@ -30,7 +30,8 @@ from translation_backfill import (
 
 PROGRESS_FILE = KB_DIR / "data" / "backfill_progress.json"
 
-PROVIDER = "deepseek_pro"
+DEFAULT_PROVIDER = "deepseek_pro"
+DEFAULT_CHUNK_CHARS = 3500  # from llm_runtime.yaml
 
 
 def load_progress() -> dict:
@@ -71,7 +72,27 @@ def dedup_items(items: list) -> list:
     return deduped
 
 
-def run():
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Resume-safe translation backfill wrapper.")
+    parser.add_argument("--provider", default=DEFAULT_PROVIDER, help="LLM provider ID")
+    parser.add_argument("--chunk-chars", type=int, default=DEFAULT_CHUNK_CHARS, help="source chars per translation chunk")
+    parser.add_argument("--limit", type=int, default=0, help="max pending non-duplicate items to translate this run")
+    parser.add_argument("--min-chars", type=int, default=0, help="only translate items with source_chars >= this value")
+    parser.add_argument("--max-chars", type=int, default=0, help="only translate items with source_chars <= this value")
+    parser.add_argument("--status-only", action="store_true", help="print current audit/progress and exit")
+    return parser.parse_args()
+
+
+def item_matches_size(item: dict, args: argparse.Namespace) -> bool:
+    source_chars = int(item.get("source_chars") or 0)
+    if args.min_chars and source_chars < args.min_chars:
+        return False
+    if args.max_chars and source_chars > args.max_chars:
+        return False
+    return True
+
+
+def run(args: argparse.Namespace):
     progress = load_progress()
     if progress["started_at"] is None:
         progress["started_at"] = datetime.now(timezone.utc).isoformat()
@@ -94,17 +115,17 @@ def run():
                 progress["skipped_duplicates"].append(item["path"])
                 print(f"  ⏭️ [重复/副归档] {item['title']} → {item['path']}")
 
-    total = len([i for i in items if "_duplicate_of" not in i])
-    progress["total"] = total
+    current_missing = len([i for i in items if "_duplicate_of" not in i])
+    progress["current_missing"] = current_missing
+    if not progress.get("total"):
+        progress["total"] = current_missing
     save_progress(progress)
 
-    policy = audit_backfill(base_dir, limit=10)  # just to get policy config
-    chunk_chars = 3500  # from llm_runtime.yaml
-
     completed = len(progress["done"])
-    print(f"\n需要翻译: {total} 篇 (已完 {completed}, 失败 {len(failed_stems)})")
+    print(f"\n当前缺译文: {current_missing} 篇 (累计已完 {completed}, 失败 {len(failed_stems)})")
 
-    for idx, item in enumerate(items):
+    pending = []
+    for item in items:
         if "_duplicate_of" in item:
             continue  # 跳过重复归档
 
@@ -113,11 +134,30 @@ def run():
         if stem in done_paths or rel in progress["done"]:
             print(f"  ✅ [已完] {rel}")
             continue
+        if not item_matches_size(item, args):
+            print(f"  ↪️ [本轮跳过/尺寸过滤] {rel} ({item['source_chars']}ch)")
+            continue
+        pending.append(item)
+
+    if args.limit > 0:
+        pending = pending[: args.limit]
+
+    print(
+        f"本轮计划: {len(pending)} 篇"
+        f" (provider={args.provider}, chunk_chars={args.chunk_chars}, "
+        f"min_chars={args.min_chars or '-'}, max_chars={args.max_chars or '-'}, limit={args.limit or '-'})"
+    )
+    if args.status_only:
+        return
+
+    for idx, item in enumerate(pending, start=1):
+        rel = item["path"]
+        stem = Path(rel).stem
         if stem in failed_stems or rel in progress["failed"]:
             print(f"  🔄 [重试] {rel}")
 
         print(f"\n{'='*60}")
-        print(f"[{idx+1}/{total}] 翻译: {item['title']}")
+        print(f"[{idx}/{len(pending)}] 翻译: {item['title']}")
         print(f"  路径: {rel}")
         print(f"  字符: {item['source_chars']}ch  目标: {item['missing_targets'][0]}")
 
@@ -134,8 +174,8 @@ def run():
                 source_text,
                 title=item["title"],
                 target_language=item["missing_targets"][0],
-                provider_name=PROVIDER,
-                chunk_chars=chunk_chars,
+                provider_name=args.provider,
+                chunk_chars=args.chunk_chars,
             )
             elapsed = time.time() - start_ts
 
@@ -144,7 +184,7 @@ def run():
             first_chunk = chunk_meta[0] if chunk_meta else {}
             meta["llm_full_translation"] = {
                 "flow": "full_translation",
-                "provider": first_chunk.get("provider", PROVIDER),
+                "provider": first_chunk.get("provider", args.provider),
                 "model": first_chunk.get("model", ""),
                 "status": first_chunk.get("status", "ok"),
                 "source_language": item["source_language"],
@@ -163,7 +203,7 @@ def run():
                 "source_chars": item["source_chars"],
                 "chunk_count": len(chunk_meta),
                 "elapsed_sec": round(elapsed, 1),
-                "provider": PROVIDER,
+                "provider": args.provider,
             }
             progress["done"].append(rel)
             progress["per_item"][rel] = record
@@ -184,7 +224,8 @@ def run():
             print(f"  ❌ 失败: {e}")
             save_progress(progress)
 
-    progress["completed_at"] = datetime.now(timezone.utc).isoformat()
+    if current_missing == 0:
+        progress["completed_at"] = datetime.now(timezone.utc).isoformat()
     save_progress(progress)
 
     print(f"\n{'='*60}")
@@ -195,4 +236,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    run(parse_args())

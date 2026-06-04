@@ -1499,3 +1499,31 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 候选池 action 基本都已进入 `candidates.js`。
 - `app.js` 仍保留候选预览内容构造、导入后打开/搜索入口，以及候选分组/view model。
+
+## 2026-06-04 - WebUI 重构第十阶段：候选预览与导入后入口模块化
+
+### 目标
+继续清理候选池残留逻辑，把候选预览内容构造和导入后的打开/搜索入口迁移到候选模块。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/candidates.js`：
+  - `KBCandidates.buildCandidatePreviewContent`
+  - `KBCandidates.previewCandidate`
+  - `KBCandidates.openLastImportedDoc`
+  - `KBCandidates.searchLastImported`
+- 候选预览 Markdown 内容构造迁移为模块内纯函数，集中处理中英文标题、摘要、正文、质量理由和英文原文展示。
+- `candidateContext` 增加预览抽屉状态、文档搜索状态、`switchTab`、`nextTick`、`previewDoc` 等引用。
+- `app.js` 中候选预览、导入后打开文档、导入后搜索文档改为调用 `KBCandidates`。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/candidates.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- Flask test client 验证 `/` 和 `/webui/static/js/modules/candidates.js` 均 200。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `candidates.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 候选池主要 action、预览构造和导入后入口已进入 `candidates.js`。
+- `app.js` 中候选分组/view model 仍可继续拆；图谱渲染仍是最大独立块。

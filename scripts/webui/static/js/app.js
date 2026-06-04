@@ -753,11 +753,26 @@ createApp({
             candidateEditOriginalTitle,
             candidateEditForm,
             lastImportResult,
+            candidateWorkbenchItem,
+            docSearchText,
+            isEditingDoc,
+            previewAssociation,
+            previewAuditItem,
+            previewContent,
+            previewDocName,
+            previewDocPath,
+            previewLoading,
+            previewMeta,
+            previewOpen,
+            previewRelated,
             stats,
             previewMode,
+            nextTick,
             showToast,
             closePreview,
+            switchTab,
             loadDocs: (...args) => loadDocs(...args),
+            previewDoc: (...args) => previewDoc(...args),
             previewCandidate: (...args) => previewCandidate(...args)
         };
         const wechatSources = ref([]);
@@ -1006,61 +1021,7 @@ createApp({
         };
 
         const previewCandidate = async (id) => {
-            previewLoading.value = true;
-            previewOpen.value = true;
-            isEditingDoc.value = false;
-            previewRelated.value = [];
-            previewAssociation.value = null;
-            previewMeta.value = {};
-            previewAuditItem.value = null;
-            try {
-                const res = await fetch(`/api/candidates/${encodeURIComponent(id)}`);
-                const data = await res.json();
-                previewMode.value = 'candidate';
-                candidateWorkbenchItem.value = data;
-                KBCandidates.setCandidateEditForm(candidateContext, data);
-                previewDocName.value = data.translated_title || data.title || '候选文章';
-                const trans = data.translation || {};
-                const zhTitle = data.translated_title || trans.translated_title || '';
-                const zhSummary = data.translated_summary || trans.translated_summary || '';
-                const zhContent = data.translated_content || trans.translated_content || '';
-                const topics = data.translated_topics || trans.topics || [];
-                const keyTerms = data.key_terms || trans.key_terms || [];
-                const quality = data.quality || {};
-                const parts = [];
-                if(zhTitle || zhSummary || zhContent) {
-                    parts.push(`# ${zhTitle || data.title || '候选文章'}`);
-                    parts.push(`> 质量等级：${data.quality_tier || '?'} · ${data.quality_score ?? 0}分 · ${quality.recommendation || ''}`);
-                    if(data.title && zhTitle && data.title !== zhTitle) parts.push(`> 原文标题：${data.title}`);
-                    if(data.source_name) parts.push(`> 来源：${data.source_name}`);
-                    if(data.publish_time) parts.push(`> 发布时间：${data.publish_time}`);
-                    if(data.url) parts.push(`> 链接：${data.url}`);
-                    if(topics.length) parts.push(`> 中文主题：${topics.join(' / ')}`);
-                    if(keyTerms.length) parts.push(`> 关键术语：${keyTerms.join(' / ')}`);
-                    parts.push('');
-                    parts.push('## 中文预览');
-                    parts.push(zhContent || zhSummary || '（暂无中文正文，仅有标题翻译）');
-                    if(quality.reasons?.length || quality.penalties?.length) {
-                        parts.push('');
-                        parts.push('## 质量判断理由');
-                        for(const r of (quality.reasons || [])) parts.push(`- + ${r}`);
-                        for(const p of (quality.penalties || [])) parts.push(`- - ${p}`);
-                    }
-                    parts.push('');
-                    parts.push('---');
-                    parts.push('');
-                    parts.push('## 英文原文');
-                    parts.push(data.content || '');
-                    previewContent.value = parts.join('\n');
-                } else {
-                    previewContent.value = data.content || '';
-                }
-                previewDocPath.value = '';
-            } catch(e) {
-                showToast('加载候选预览失败', 'error');
-            } finally {
-                previewLoading.value = false;
-            }
+            await KBCandidates.previewCandidate(candidateContext, id);
         };
 
         const translateCandidate = async (id, options={}) => {
@@ -1116,19 +1077,11 @@ createApp({
         };
 
         const openLastImportedDoc = async () => {
-            if(!lastImportResult.value?.wiki_path) return;
-            switchTab('docs');
-            await nextTick();
-            previewDoc(lastImportResult.value.wiki_path);
+            await KBCandidates.openLastImportedDoc(candidateContext);
         };
 
         const searchLastImported = async () => {
-            const q = lastImportResult.value?.search_query || lastImportResult.value?.wiki_path || '';
-            if(!q) return;
-            docSearchText.value = q;
-            switchTab('docs');
-            await loadDocs();
-            showToast(`已按导入内容过滤文档：${q}`, 'info', 5000);
+            await KBCandidates.searchLastImported(candidateContext);
         };
 
         const runMaintenance = async () => {

@@ -297,6 +297,7 @@ createApp({
         const docsPageSize = ref(80);
         const isMaintaining = ref(false);
         const maintenanceReport = ref(null);
+        const stats = ref({});
         const repairingQuality = ref(false);
         const candidates = ref([]);
         const candidateSummary = ref(null);
@@ -379,7 +380,6 @@ createApp({
         const rssSyncResult = ref(null);
         const rssNewForm = ref(KBSources.defaultRssForm());
         const dragOver = ref(false);
-        const stats = ref({});
         const showUrlInput = ref(false);
         const fetchUrlInput = ref('');
         const isFetchingUrl = ref(false);
@@ -387,6 +387,8 @@ createApp({
         const fetchUrlSuccess = ref(false);
         const failedImports = ref([]);
         const qualityOnly = ref(false);
+        const qualityBadCount = computed(() => KBDocuments.qualityBadCount(docs.value));
+        const qualityIssueSummary = computed(() => KBDocuments.qualityIssueSummary(docs.value));
         const issueLabel = (issue) => KBDocuments.issueLabel(issue);
         const issueText = (issues) => KBDocuments.issueText(issues);
         previewContext = {
@@ -501,9 +503,6 @@ createApp({
         const visibleDocs = computed(() => KBDocuments.visibleDocs(filteredDocs.value, selectedDocFolder.value));
         const docsTotalPages = computed(() => KBDocuments.totalPages(visibleDocs.value, docsPageSize.value));
         const pagedVisibleDocs = computed(() => KBDocuments.pageItems(visibleDocs.value, docsPage.value, docsPageSize.value));
-
-        const qualityBadCount = computed(() => KBDocuments.qualityBadCount(docs.value));
-        const qualityIssueSummary = computed(() => KBDocuments.qualityIssueSummary(docs.value));
 
         const repairDocQuality = async (path) => {
             await KBMaintenance.repairDocQuality(maintenanceContext, path);

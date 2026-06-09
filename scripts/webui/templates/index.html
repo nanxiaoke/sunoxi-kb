@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sunoxi Knowledge Base</title>
     <!-- Vue 3 -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/webui/static/vendor/vue.global.prod.js?v=20260609-vendor"></script>
     <!-- Tailwind & DaisyUI -->
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.0/dist/full.css" rel="stylesheet" type="text/css" />
+    <link href="/webui/static/vendor/daisyui.full.css?v=20260609-vendor" rel="stylesheet" type="text/css" />
     <script>
         (() => {
             const originalWarn = console.warn.bind(console);
@@ -21,7 +21,7 @@
             };
         })();
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/webui/static/vendor/tailwind.3.4.17.js?v=20260609-vendor"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -34,13 +34,13 @@
         window.__restoreTailwindCdnWarn?.();
     </script>
     <!-- ECharts for Graph -->
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="/webui/static/vendor/echarts.min.js?v=20260609-vendor"></script>
     <!-- Marked & DOMPurify & Highlight (pinned versions) -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="/webui/static/vendor/marked.min.js?v=20260609-vendor"></script>
+    <script src="/webui/static/vendor/purify.min.js?v=20260609-vendor"></script>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=4">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="/webui/static/vendor/github-dark.min.css?v=20260609-vendor">
+    <script src="/webui/static/vendor/highlight.min.js?v=20260609-vendor"></script>
     
     <style>
         /* Responsive scrollbars & mobile fixes */

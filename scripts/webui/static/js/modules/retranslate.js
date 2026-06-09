@@ -1,4 +1,40 @@
 (function (global) {
+    function selectedTranslationModel(models, providerId) {
+        return (models || []).find(m => (
+            m.provider === providerId ||
+            m.provider_name === providerId ||
+            m.id === providerId
+        )) || null;
+    }
+
+    function translationProviderLabel(model, fallbackProvider = '') {
+        if (!model) return fallbackProvider || '-';
+        const kind = model.kind === 'online' ? '在线' : '本地';
+        return `${model.label || model.provider_name || model.provider || kind} · ${model.model || '-'}`;
+    }
+
+    function fallbackTranslationModels() {
+        return [
+            { id: 'deepseek_pro', provider: 'deepseek_pro', provider_name: 'deepseek_pro', kind: 'online', label: 'DeepSeek Pro', model: 'deepseek-v4-pro', available: false, key_env: 'DEEPSEEK_API_KEY', timeout_sec: 90 },
+            { id: 'local_gemma4', provider: 'local_gemma4', provider_name: 'local_gemma4', kind: 'local', label: 'Local Gemma4', model: 'gemma4:e4b', available: true, timeout_sec: 120 }
+        ];
+    }
+
+    async function loadTranslationModels(ctx) {
+        try {
+            const data = await KBApi.getJson('/api/translation/models');
+            ctx.translationModels.value = data.models || [];
+            const current = ctx.selectedTranslationModel.value;
+            if (!current || current.available === false) {
+                const firstAvailable = ctx.translationModels.value.find(m => m.available);
+                ctx.translationProvider.value = firstAvailable?.provider || ctx.translationModels.value[0]?.provider || 'local_gemma4';
+            }
+        } catch (e) {
+            ctx.translationModels.value = fallbackTranslationModels();
+            ctx.translationProvider.value = 'local_gemma4';
+        }
+    }
+
     function buildRetranslateAction(ctx) {
         const model = ctx.selectedTranslationModel.value;
         const disabled = (reason, title) => ({
@@ -90,6 +126,9 @@
 
     global.KBRetranslate = {
         buildRetranslateAction,
-        runRetranslate
+        loadTranslationModels,
+        runRetranslate,
+        selectedTranslationModel,
+        translationProviderLabel
     };
 })(window);

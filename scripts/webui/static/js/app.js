@@ -148,11 +148,12 @@ createApp({
         const savingLlmConfig = ref(false);
         const restoringLlmBackup = ref('');
         const objectEntries = (obj) => Object.entries(obj || {});
-        const selectedTranslationModel = computed(() => translationModels.value.find(m => m.provider === translationProvider.value || m.provider_name === translationProvider.value || m.id === translationProvider.value) || null);
-        const translationProviderLabel = (model) => {
-            if(!model) return translationProvider.value || '-';
-            const kind = model.kind === 'online' ? '在线' : '本地';
-            return `${model.label || model.provider_name || model.provider || kind} · ${model.model || '-'}`;
+        const selectedTranslationModel = computed(() => KBRetranslate.selectedTranslationModel(translationModels.value, translationProvider.value));
+        const translationProviderLabel = (model) => KBRetranslate.translationProviderLabel(model, translationProvider.value);
+        const translationModelContext = {
+            selectedTranslationModel,
+            translationModels,
+            translationProvider
         };
         const retranslateContext = {
             selectedTranslationModel,
@@ -278,22 +279,7 @@ createApp({
         };
 
         const loadTranslationModels = async () => {
-            try {
-                const res = await fetch('/api/translation/models');
-                const data = await res.json();
-                translationModels.value = data.models || [];
-                const current = selectedTranslationModel.value;
-                if(!current || current.available === false) {
-                    const firstAvailable = translationModels.value.find(m => m.available);
-                    translationProvider.value = firstAvailable?.provider || translationModels.value[0]?.provider || 'local_gemma4';
-                }
-            } catch(e) {
-                translationModels.value = [
-                    { id: 'deepseek_pro', provider: 'deepseek_pro', provider_name: 'deepseek_pro', kind: 'online', label: 'DeepSeek Pro', model: 'deepseek-v4-pro', available: false, key_env: 'DEEPSEEK_API_KEY', timeout_sec: 90 },
-                    { id: 'local_gemma4', provider: 'local_gemma4', provider_name: 'local_gemma4', kind: 'local', label: 'Local Gemma4', model: 'gemma4:e4b', available: true, timeout_sec: 120 }
-                ];
-                translationProvider.value = 'local_gemma4';
-            }
+            await KBRetranslate.loadTranslationModels(translationModelContext);
         };
 
         const retranslateDoc = async () => KBRetranslate.runRetranslate(retranslateContext);
@@ -348,21 +334,7 @@ createApp({
         };
 
         const testLlmProvider = async (provider) => {
-            if(!provider?.name) return;
-            provider.testing = true;
-            provider.test_result = null;
-            try {
-                const res = await fetch(`/api/llm/providers/${encodeURIComponent(provider.name)}/test`, { method: 'POST' });
-                const data = await res.json();
-                provider.test_result = data;
-                if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                showToast(`${provider.name} 测试通过`, 'success', 4000);
-            } catch(e) {
-                provider.test_result = provider.test_result || { ok: false, error: e.message };
-                showToast(`${provider.name} 测试失败: ${e.message}`, 'error', 7000);
-            } finally {
-                provider.testing = false;
-            }
+            await KBSettings.testLlmProvider(settingsContext, provider);
         };
 
         // --- Document Management ---

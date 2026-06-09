@@ -297,6 +297,22 @@
         providers.splice(target, 0, item);
     }
 
+    async function testLlmProvider(ctx, provider) {
+        if (!provider?.name) return;
+        provider.testing = true;
+        provider.test_result = null;
+        try {
+            const data = await KBApi.requestJson(`/api/llm/providers/${encodeURIComponent(provider.name)}/test`, { method: 'POST' });
+            provider.test_result = data;
+            ctx.showToast(`${provider.name} 测试通过`, 'success', 4000);
+        } catch (e) {
+            provider.test_result = provider.test_result || { ok: false, error: e.message };
+            ctx.showToast(`${provider.name} 测试失败: ${e.message}`, 'error', 7000);
+        } finally {
+            provider.testing = false;
+        }
+    }
+
     global.KBSettings = {
         addLlmProvider,
         addProviderToFlow,
@@ -318,6 +334,7 @@
         saveLlmConfig,
         saveWebuiConfig,
         setLlmMode,
-        syncProviderName
+        syncProviderName,
+        testLlmProvider
     };
 })(window);

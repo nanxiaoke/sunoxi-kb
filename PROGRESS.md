@@ -1741,3 +1741,33 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 全局 UI glue 已进入 `ui.js`。
 - `app.js` 剩余最大块仍是图谱渲染；按当前判断，图谱可后续单独重做，不建议继续在本轮扩大重构面。
+
+## 2026-06-09 - WebUI 重构第十八阶段：翻译与 Provider 测试 Glue 模块化
+
+### 目标
+继续按低风险路线缩小 `app.js`，避开图谱主逻辑，把重翻译和设置页中独立 API glue 迁移到对应模块。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/retranslate.js`：
+  - `KBRetranslate.selectedTranslationModel`
+  - `KBRetranslate.translationProviderLabel`
+  - `KBRetranslate.loadTranslationModels`
+- 翻译模型加载、可用模型选择和 fallback 模型列表从 `app.js` 迁移到 `retranslate.js`。
+- 扩展 `scripts/webui/static/js/modules/settings.js`：
+  - `KBSettings.testLlmProvider`
+- LLM Provider 测试请求、测试状态和 toast 反馈从 `app.js` 迁移到 `settings.js`。
+- `app.js` 对应逻辑改为薄 wrapper，图谱渲染仍保持原样。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/retranslate.js` 通过。
+- `node --check scripts/webui/static/js/modules/settings.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `retranslate.js` 与 `settings.js` 静态路由均返回 `text/javascript`。
+
+### 当前状态
+- 重翻译相关 action、模型选择 glue 和设置页 Provider 测试都已模块化。
+- `app.js` 剩余主要复杂度仍集中在图谱渲染，以及根级状态/context 编排。

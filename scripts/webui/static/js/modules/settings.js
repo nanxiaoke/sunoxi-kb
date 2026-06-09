@@ -42,6 +42,34 @@
         await ctx.loadTranslationModels();
     }
 
+    const normalizeLlmProviders = (items) => (items || []).map(p => ({
+        ...p,
+        name: String(p.name || '').trim(),
+        _original_name: String(p.name || '').trim()
+    }));
+
+    const normalizeLlmFlows = (items) => (items || []).map(f => ({
+        ...f,
+        providers: Array.isArray(f.providers) ? f.providers.filter(Boolean) : [],
+        new_provider: ''
+    }));
+
+    function llmModeLabel(options, mode) {
+        return (options || []).find(m => m.id === mode)?.label || mode || 'custom';
+    }
+
+    function llmModeDescription(options, mode) {
+        return (options || []).find(m => m.id === mode)?.description || '';
+    }
+
+    function flowProviderChain(flows, providers, flowName) {
+        const flow = (flows || []).find(f => f.name === flowName);
+        return (flow?.providers || []).map(name => {
+            const provider = (providers || []).find(item => item.name === name);
+            return provider ? `${name} / ${provider.model}` : name;
+        }).join(' -> ');
+    }
+
     async function loadLlmConfig(ctx) {
         ctx.loadingLlmConfig.value = true;
         try {
@@ -146,6 +174,15 @@
 
     function llmAuditExportUrl(ctx, format) {
         return `/api/llm/audit?${llmAuditParams(ctx.llmAuditFilters, format).toString()}`;
+    }
+
+    async function resetLlmAuditFilters(ctx) {
+        Object.assign(ctx.llmAuditFilters, { flow: '', provider: '', model: '', status: '', missing: false, fallback: false, retranslated: false });
+        await loadLlmAudit(ctx);
+    }
+
+    function exportLlmAudit(ctx, format) {
+        window.open(llmAuditExportUrl(ctx, format), '_blank');
     }
 
     async function loadTranslationBackfillAudit(ctx) {
@@ -319,7 +356,11 @@
         applyLlmConfigPayload,
         availableProvidersForFlow,
         deleteLlmProvider,
+        exportLlmAudit,
+        flowProviderChain,
         llmAuditExportUrl,
+        llmModeDescription,
+        llmModeLabel,
         loadLlmAudit,
         loadLlmBackups,
         loadLlmConfig,
@@ -330,11 +371,14 @@
         providerLabel,
         providerTimeout,
         removeFlowProvider,
+        resetLlmAuditFilters,
         restoreLlmBackup,
         saveLlmConfig,
         saveWebuiConfig,
         setLlmMode,
         syncProviderName,
-        testLlmProvider
+        testLlmProvider,
+        normalizeLlmFlows,
+        normalizeLlmProviders
     };
 })(window);

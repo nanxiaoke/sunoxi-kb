@@ -1771,3 +1771,33 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 重翻译相关 action、模型选择 glue 和设置页 Provider 测试都已模块化。
 - `app.js` 剩余主要复杂度仍集中在图谱渲染，以及根级状态/context 编排。
+
+## 2026-06-09 - WebUI 重构第十九阶段：设置页 View Model Helpers 模块化
+
+### 目标
+继续避免图谱重构，抽取设置页中的纯展示/编排 helper，进一步缩小 `app.js`。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/settings.js`：
+  - `KBSettings.normalizeLlmProviders`
+  - `KBSettings.normalizeLlmFlows`
+  - `KBSettings.llmModeLabel`
+  - `KBSettings.llmModeDescription`
+  - `KBSettings.flowProviderChain`
+  - `KBSettings.resetLlmAuditFilters`
+  - `KBSettings.exportLlmAudit`
+- `app.js` 中 LLM mode 文案、Provider 链展示、Provider/Flow normalize、审计筛选重置和审计导出改为调用 `KBSettings`。
+- 图谱渲染仍保持原样，未继续接入未跟踪的 `graph.js` 草稿。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/settings.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/retranslate.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `settings.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 设置页大部分 API action、Provider/Flow 编辑和 view model helper 已进入 `settings.js`。
+- `app.js` 剩余主要是根级状态/context 编排、图谱渲染，以及少量跨模块薄 wrapper。

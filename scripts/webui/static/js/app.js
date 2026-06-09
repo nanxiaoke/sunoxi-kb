@@ -169,30 +169,15 @@ createApp({
         };
         const retranslateAction = computed(() => KBRetranslate.buildRetranslateAction(retranslateContext));
         const retranslateButtonTitle = computed(() => retranslateAction.value.title);
-        const llmModeLabel = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.label) || llmMode.value || 'custom');
-        const llmModeDescription = computed(() => (llmModeOptions.value.find(m => m.id === llmMode.value)?.description) || '');
+        const llmModeLabel = computed(() => KBSettings.llmModeLabel(llmModeOptions.value, llmMode.value));
+        const llmModeDescription = computed(() => KBSettings.llmModeDescription(llmModeOptions.value, llmMode.value));
         const fileImportFlow = computed(() => llmFlows.value.find(f => f.name === 'file_import_structure') || null);
-        const fileImportProviderChain = computed(() => (fileImportFlow.value?.providers || []).map(name => {
-            const p = llmProviders.value.find(item => item.name === name);
-            return p ? `${name} / ${p.model}` : name;
-        }).join(' -> '));
+        const fileImportProviderChain = computed(() => KBSettings.flowProviderChain(llmFlows.value, llmProviders.value, 'file_import_structure'));
         const qaFlow = computed(() => llmFlows.value.find(f => f.name === 'qa') || null);
-        const qaProviderChain = computed(() => (qaFlow.value?.providers || []).map(name => {
-            const p = llmProviders.value.find(item => item.name === name);
-            return p ? `${name} / ${p.model}` : name;
-        }).join(' -> '));
+        const qaProviderChain = computed(() => KBSettings.flowProviderChain(llmFlows.value, llmProviders.value, 'qa'));
 
-        const normalizeLlmProviders = (items) => (items || []).map(p => ({
-            ...p,
-            name: String(p.name || '').trim(),
-            _original_name: String(p.name || '').trim()
-        }));
-
-        const normalizeLlmFlows = (items) => (items || []).map(f => ({
-            ...f,
-            providers: Array.isArray(f.providers) ? f.providers.filter(Boolean) : [],
-            new_provider: ''
-        }));
+        const normalizeLlmProviders = KBSettings.normalizeLlmProviders;
+        const normalizeLlmFlows = KBSettings.normalizeLlmFlows;
         const settingsContext = {
             webuiConfig,
             loadingWebuiConfig,
@@ -309,8 +294,7 @@ createApp({
         };
 
         const resetLlmAuditFilters = async () => {
-            Object.assign(llmAuditFilters, { flow: '', provider: '', model: '', status: '', missing: false, fallback: false, retranslated: false });
-            await loadLlmAudit();
+            await KBSettings.resetLlmAuditFilters(settingsContext);
         };
 
         const llmAuditExportUrl = (format) => {
@@ -318,7 +302,7 @@ createApp({
         };
 
         const exportLlmAudit = (format) => {
-            window.open(llmAuditExportUrl(format), '_blank');
+            KBSettings.exportLlmAudit(settingsContext, format);
         };
 
         const loadTranslationBackfillAudit = async () => {

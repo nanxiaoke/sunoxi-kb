@@ -1709,3 +1709,35 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 聊天和文档预览基础逻辑都已拆出。
 - `app.js` 中剩余最大独立块主要是图谱渲染和少量全局 UI glue。
+
+## 2026-06-09 - WebUI 重构第十七阶段：全局 UI Glue 模块化
+
+### 目标
+用户明确图谱优先级较低，可后续重做；本阶段避开图谱渲染重构，优先抽取低风险的全局 UI glue。
+
+### 本阶段完成
+- 新增 `scripts/webui/static/js/modules/ui.js`：
+  - `KBUI.defaultTranslationPolicy`
+  - `KBUI.mergeTranslationPolicy`
+  - `KBUI.translate`
+  - `KBUI.applyTheme`
+  - `KBUI.createToasts`
+  - `KBUI.createMarkdownRenderer`
+  - `KBUI.formatBytes`
+  - `KBUI.formatDate`
+- `app.js` 移除内联 i18n 字典、翻译策略 merge、toast 管理、Markdown 初始化和通用格式化函数。
+- 模板新增 `/webui/static/js/modules/ui.js` 加载，继续保持无构建链。
+- 图谱逻辑保持原样，未继续扩大图谱拆分范围。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/preview.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `karpathy-kb.service` 已重启，`/health` 返回 ok，线上 `ui.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 全局 UI glue 已进入 `ui.js`。
+- `app.js` 剩余最大块仍是图谱渲染；按当前判断，图谱可后续单独重做，不建议继续在本轮扩大重构面。

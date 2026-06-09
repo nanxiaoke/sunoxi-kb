@@ -36,14 +36,11 @@ createApp({
         };
 
         const saveAllSettings = async () => {
-            await saveWebuiConfig();
-            if(featureEnabled('llm_settings')) await saveLlmConfig();
+            await KBSettings.saveAllSettings(settingsContext);
         };
 
         const refreshAllSettings = async () => {
-            await loadWebuiConfig();
-            if(featureEnabled('llm_settings')) await loadLlmConfig();
-            if(featureEnabled('llm_audit')) await loadLlmAudit();
+            await KBSettings.refreshAllSettings(settingsContext);
         };
         
         const switchTab = (tab) => KBUI.switchTab(navigationContext, tab);
@@ -141,9 +138,8 @@ createApp({
         const retranslateButtonTitle = computed(() => retranslateAction.value.title);
         const llmModeLabel = computed(() => KBSettings.llmModeLabel(llmModeOptions.value, llmMode.value));
         const llmModeDescription = computed(() => KBSettings.llmModeDescription(llmModeOptions.value, llmMode.value));
-        const fileImportFlow = computed(() => llmFlows.value.find(f => f.name === 'file_import_structure') || null);
+        const fileImportFlow = computed(() => KBSettings.flowByName(llmFlows.value, 'file_import_structure'));
         const fileImportProviderChain = computed(() => KBSettings.flowProviderChain(llmFlows.value, llmProviders.value, 'file_import_structure'));
-        const qaFlow = computed(() => llmFlows.value.find(f => f.name === 'qa') || null);
         const qaProviderChain = computed(() => KBSettings.flowProviderChain(llmFlows.value, llmProviders.value, 'qa'));
 
         const normalizeLlmProviders = KBSettings.normalizeLlmProviders;
@@ -170,6 +166,7 @@ createApp({
             restoringLlmBackup,
             llmBackups,
             llmModeLabel,
+            featureEnabled,
             normalizeLlmProviders,
             normalizeLlmFlows,
             t,
@@ -245,10 +242,6 @@ createApp({
 
         const saveLlmConfig = async () => {
             await KBSettings.saveLlmConfig(settingsContext);
-        };
-
-        const applyLlmConfigPayload = async (data) => {
-            await KBSettings.applyLlmConfigPayload(settingsContext, data);
         };
 
         const setLlmMode = async (mode) => {

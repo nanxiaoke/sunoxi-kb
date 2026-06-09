@@ -32,6 +32,17 @@
         }
     }
 
+    async function saveAllSettings(ctx) {
+        await saveWebuiConfig(ctx);
+        if (ctx.featureEnabled('llm_settings')) await saveLlmConfig(ctx);
+    }
+
+    async function refreshAllSettings(ctx) {
+        await loadWebuiConfig(ctx);
+        if (ctx.featureEnabled('llm_settings')) await loadLlmConfig(ctx);
+        if (ctx.featureEnabled('llm_audit')) await loadLlmAudit(ctx);
+    }
+
     async function applyLlmConfigPayload(ctx, data) {
         ctx.llmProviders.value = ctx.normalizeLlmProviders(data.providers);
         ctx.llmFlows.value = ctx.normalizeLlmFlows(data.flows);
@@ -62,8 +73,12 @@
         return (options || []).find(m => m.id === mode)?.description || '';
     }
 
+    function flowByName(flows, flowName) {
+        return (flows || []).find(f => f.name === flowName) || null;
+    }
+
     function flowProviderChain(flows, providers, flowName) {
-        const flow = (flows || []).find(f => f.name === flowName);
+        const flow = flowByName(flows, flowName);
         return (flow?.providers || []).map(name => {
             const provider = (providers || []).find(item => item.name === name);
             return provider ? `${name} / ${provider.model}` : name;
@@ -357,6 +372,7 @@
         availableProvidersForFlow,
         deleteLlmProvider,
         exportLlmAudit,
+        flowByName,
         flowProviderChain,
         llmAuditExportUrl,
         llmModeDescription,
@@ -373,6 +389,8 @@
         removeFlowProvider,
         resetLlmAuditFilters,
         restoreLlmBackup,
+        refreshAllSettings,
+        saveAllSettings,
         saveLlmConfig,
         saveWebuiConfig,
         setLlmMode,

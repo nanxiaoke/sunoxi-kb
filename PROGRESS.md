@@ -1941,3 +1941,30 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - App shell 的语言、标题、主题、feature、启动加载、resize 和 tab 切换 glue 已进入 `ui.js`。
 - `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和后续单独处理的图谱渲染。
+
+## 2026-06-09 - WebUI 重构第二十五阶段：设置页保存刷新编排模块化
+
+### 目标
+继续清理 `app.js` 顶层 settings glue，不触碰图谱渲染。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/settings.js`：
+  - `KBSettings.saveAllSettings`
+  - `KBSettings.refreshAllSettings`
+  - `KBSettings.flowByName`
+- 系统设置“一键保存”和“一键刷新”的 WebUI/LLM/审计编排从 `app.js` 迁移到 `settings.js`。
+- `fileImportFlow` 改为调用 `KBSettings.flowByName`。
+- 删除 `app.js` 中未使用的 `qaFlow` computed 和 `applyLlmConfigPayload` wrapper。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/settings.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `systemctl --user restart karpathy-kb.service` 后 `/health` 返回 `ok`。
+- 线上 `settings.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- settings 模块已覆盖 WebUI 配置、LLM 配置/模式/备份、审计、Provider/Flow 编辑和保存刷新编排。
+- `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和后续单独处理的图谱渲染。

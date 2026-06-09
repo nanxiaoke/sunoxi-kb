@@ -21,16 +21,11 @@ createApp({
         const savingWebuiConfig = ref(false);
         const webuiApp = computed(() => webuiConfig.value.app || {});
         const webuiFeatures = computed(() => webuiConfig.value.features || {});
-        const featureEnabled = (name) => webuiFeatures.value[name] !== false;
+        const featureEnabled = (name) => KBUI.featureEnabled(webuiFeatures.value, name);
         const linkQualityHealth = computed(() => KBLinkQuality.summarizeLinkQuality(associationReport.value?.summary || {}));
         const t = (key) => KBUI.translate(uiLang.value, key);
-        watch(uiLang, (v) => {
-            localStorage.setItem('kb_ui_lang', v);
-            document.documentElement.lang = v === 'en' ? 'en' : 'zh';
-        }, { immediate: true });
-        watch(webuiApp, (app) => {
-            if(app?.title) document.title = app.title;
-        }, { immediate: true, deep: true });
+        KBUI.bindLanguage(watch, uiLang);
+        KBUI.bindDocumentTitle(watch, webuiApp);
 
         const loadWebuiConfig = async () => {
             await KBSettings.loadWebuiConfig(settingsContext);
@@ -80,12 +75,12 @@ createApp({
 
         // Theme
         const toggleTheme = () => {
-            theme.value = theme.value === 'dark' ? 'light' : 'dark';
-            KBUI.applyTheme(theme.value);
-            localStorage.setItem('theme', theme.value);
-            if(activeTab.value === 'graph' && chartInstance) {
-                setTimeout(initGraph, 100); // Re-render graph with new theme colors
-            }
+            KBUI.toggleTheme({
+                theme,
+                activeTab,
+                hasGraph: () => !!chartInstance,
+                initGraph
+            });
         };
         KBUI.applyTheme(theme.value);
 

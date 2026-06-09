@@ -106,8 +106,34 @@
         return key.split('.').reduce((obj, part) => obj && obj[part], i18n[lang]) || key;
     }
 
+    function featureEnabled(features, name) {
+        return (features || {})[name] !== false;
+    }
+
+    function bindLanguage(watch, uiLang) {
+        watch(uiLang, (v) => {
+            localStorage.setItem('kb_ui_lang', v);
+            document.documentElement.lang = v === 'en' ? 'en' : 'zh';
+        }, { immediate: true });
+    }
+
+    function bindDocumentTitle(watch, webuiApp) {
+        watch(webuiApp, (app) => {
+            if (app?.title) document.title = app.title;
+        }, { immediate: true, deep: true });
+    }
+
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
+    }
+
+    function toggleTheme(ctx) {
+        ctx.theme.value = ctx.theme.value === 'dark' ? 'light' : 'dark';
+        applyTheme(ctx.theme.value);
+        localStorage.setItem('theme', ctx.theme.value);
+        if (ctx.activeTab.value === 'graph' && ctx.hasGraph()) {
+            setTimeout(ctx.initGraph, 100);
+        }
     }
 
     function createToasts(ref) {
@@ -167,12 +193,16 @@
 
     global.KBUI = {
         applyTheme,
+        bindDocumentTitle,
+        bindLanguage,
         createMarkdownRenderer,
         createToasts,
         defaultTranslationPolicy,
+        featureEnabled,
         formatBytes,
         formatDate,
         mergeTranslationPolicy,
+        toggleTheme,
         translate
     };
 })(window);

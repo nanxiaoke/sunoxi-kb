@@ -1826,3 +1826,30 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 文档列表、文档 action、质量 view model、URL 导入、上传和拖拽入口都已进入 `documents.js`。
 - `app.js` 剩余主要是根级状态/context 编排、图谱渲染和跨模块薄 wrapper。
+
+## 2026-06-09 - WebUI 重构第二十一阶段：App Shell UI Helpers 模块化
+
+### 目标
+继续低风险清理根级 UI glue，不触碰图谱渲染实现。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/ui.js`：
+  - `KBUI.featureEnabled`
+  - `KBUI.bindLanguage`
+  - `KBUI.bindDocumentTitle`
+  - `KBUI.toggleTheme`
+- 语言持久化、`document.lang` 同步、页面标题同步、功能开关判断和主题切换逻辑从 `app.js` 迁移到 `ui.js`。
+- 主题切换时的图谱重绘仍通过 `initGraph` 回调触发，未迁移图谱代码。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/documents.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `ui.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- App shell 的语言、标题、主题和 feature 判断已进入 `ui.js`。
+- `app.js` 剩余主要是根级状态/context 编排、图谱渲染和跨模块薄 wrapper。

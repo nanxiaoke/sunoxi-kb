@@ -8,6 +8,19 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <!-- Tailwind & DaisyUI -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.0/dist/full.css" rel="stylesheet" type="text/css" />
+    <script>
+        (() => {
+            const originalWarn = console.warn.bind(console);
+            console.warn = (...args) => {
+                if (String(args[0] || '').includes('cdn.tailwindcss.com should not be used in production')) return;
+                originalWarn(...args);
+            };
+            window.__restoreTailwindCdnWarn = () => {
+                console.warn = originalWarn;
+                delete window.__restoreTailwindCdnWarn;
+            };
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -18,6 +31,7 @@
                 }
             }
         }
+        window.__restoreTailwindCdnWarn?.();
     </script>
     <!-- ECharts for Graph -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>

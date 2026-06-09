@@ -207,6 +207,19 @@
         await loadDocs(ctx);
     }
 
+    async function handleFileUpload(ctx, event) {
+        const files = event.target.files;
+        if (!files.length) return;
+        await uploadFiles(ctx, files);
+    }
+
+    async function handleDrop(ctx, event) {
+        ctx.dragOver.value = false;
+        const files = event.dataTransfer.files;
+        if (!files.length) return;
+        await uploadFiles(ctx, files);
+    }
+
     async function retryFailedImport(ctx, item) {
         if (!item?.raw_path || item.retrying) return;
         item.retrying = true;
@@ -229,6 +242,8 @@
         deleteDoc,
         filterDocs,
         fetchUrl,
+        handleDrop,
+        handleFileUpload,
         issueLabel,
         issueText,
         loadDocs,

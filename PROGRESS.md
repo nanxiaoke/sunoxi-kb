@@ -1801,3 +1801,28 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - 设置页大部分 API action、Provider/Flow 编辑和 view model helper 已进入 `settings.js`。
 - `app.js` 剩余主要是根级状态/context 编排、图谱渲染，以及少量跨模块薄 wrapper。
+
+## 2026-06-09 - WebUI 重构第二十阶段：文档上传入口模块化
+
+### 目标
+继续小步清理 `app.js`，抽取文档管理中低耦合的上传/拖拽入口逻辑，不触碰图谱。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/documents.js`：
+  - `KBDocuments.handleFileUpload`
+  - `KBDocuments.handleDrop`
+- `documentsContext` 注入 `dragOver`，拖拽状态复位和文件提取迁移到文档模块。
+- `app.js` 中上传和拖拽处理保留薄 wrapper。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/documents.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/settings.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `documents.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 文档列表、文档 action、质量 view model、URL 导入、上传和拖拽入口都已进入 `documents.js`。
+- `app.js` 剩余主要是根级状态/context 编排、图谱渲染和跨模块薄 wrapper。

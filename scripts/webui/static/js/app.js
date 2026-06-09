@@ -462,6 +462,7 @@ createApp({
             previewDoc: (...args) => previewDoc(...args)
         };
         const documentsContext = {
+            dragOver,
             docs,
             failedImports,
             fetchUrlError,
@@ -630,15 +631,10 @@ createApp({
         };
 
         const handleFileUpload = async (e) => {
-            const files = e.target.files;
-            if(!files.length) return;
-            await uploadFiles(files);
+            await KBDocuments.handleFileUpload(documentsContext, e);
         };
         const handleDrop = async (e) => {
-            dragOver.value = false;
-            const files = e.dataTransfer.files;
-            if(!files.length) return;
-            await uploadFiles(files);
+            await KBDocuments.handleDrop(documentsContext, e);
         };
         const uploadFiles = async (files) => {
             await KBDocuments.uploadFiles(documentsContext, files);

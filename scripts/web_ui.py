@@ -2889,7 +2889,11 @@ def _load_index_html() -> str:
 
 @app.route("/")
 def index():
-    return _load_index_html(), 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return _load_index_html(), 200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, max-age=0',
+        'Pragma': 'no-cache'
+    }
 
 
 @app.route("/static/<path:filename>")
@@ -2899,7 +2903,10 @@ def static_files(filename: str):
 
 @app.route("/webui/static/<path:filename>")
 def webui_static_files(filename: str):
-    return send_from_directory(WEBUI_STATIC_DIR, filename)
+    response = send_from_directory(WEBUI_STATIC_DIR, filename)
+    response.headers['Cache-Control'] = 'no-store, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 
 

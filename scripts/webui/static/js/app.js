@@ -962,28 +962,24 @@ createApp({
 
         // Resize observer for graph
         onMounted(async () => {
-            window.addEventListener('resize', () => {
-                if(activeTab.value === 'graph' && chartInstance) chartInstance.resize();
+            await KBUI.mountApp({
+                activeTab,
+                stats,
+                featureEnabled,
+                hasGraph: () => !!chartInstance,
+                resizeGraph: () => chartInstance.resize(),
+                loadWebuiConfig,
+                loadCandidates,
+                loadBatchImportStatus,
+                startBatchImportPolling,
+                loadWechatSources,
+                loadRssFeeds,
+                loadTranslationModels,
+                loadLlmConfig,
+                loadLlmBackups,
+                loadLlmAudit,
+                loadTranslationBackfillAudit
             });
-            
-            // Initial load stats & sidebar counts
-            await loadWebuiConfig().catch(()=>{});
-            fetch('/api/stats').then(r=>r.json()).then(s => stats.value = s).catch(()=>{});
-            if(featureEnabled('candidates')) {
-                loadCandidates().catch(()=>{});
-                loadBatchImportStatus().then(job => { if(job.running) startBatchImportPolling(); }).catch(()=>{});
-            }
-            if(featureEnabled('wechat')) loadWechatSources().catch(()=>{});
-            if(featureEnabled('rss')) loadRssFeeds().catch(()=>{});
-            loadTranslationModels().catch(()=>{});
-            if(featureEnabled('llm_settings')) {
-                loadLlmConfig().catch(()=>{});
-                loadLlmBackups().catch(()=>{});
-            }
-            if(featureEnabled('llm_audit')) {
-                loadLlmAudit().catch(()=>{});
-                loadTranslationBackfillAudit().catch(()=>{});
-            }
         });
 
         return {

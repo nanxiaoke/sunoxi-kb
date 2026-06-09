@@ -1853,3 +1853,27 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - App shell 的语言、标题、主题和 feature 判断已进入 `ui.js`。
 - `app.js` 剩余主要是根级状态/context 编排、图谱渲染和跨模块薄 wrapper。
+
+## 2026-06-09 - WebUI 重构第二十二阶段：App Mount Bootstrap 模块化
+
+### 目标
+继续抽取根级但低风险的启动编排，把初始数据加载和 resize 监听移入 app shell helper，不迁移图谱实现。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/ui.js`：
+  - `KBUI.mountApp`
+- 初始 `loadWebuiConfig`、stats、候选池、公众号/RSS、翻译模型、LLM 配置和审计加载编排从 `app.js` 迁移到 `ui.js`。
+- 图谱 resize 监听通过 `hasGraph` / `resizeGraph` 回调处理，图谱渲染仍留在 `app.js`。
+- `app.js` 的 `onMounted` 缩减为一次 `KBUI.mountApp(...)` 调用。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `ui.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- app shell 的启动加载、resize 监听、语言/标题/主题/feature helper 都已进入 `ui.js`。
+- `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和图谱渲染。

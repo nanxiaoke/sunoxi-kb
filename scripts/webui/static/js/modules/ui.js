@@ -136,6 +136,32 @@
         }
     }
 
+    async function mountApp(ctx) {
+        window.addEventListener('resize', () => {
+            if (ctx.activeTab.value === 'graph' && ctx.hasGraph()) ctx.resizeGraph();
+        });
+
+        await ctx.loadWebuiConfig().catch(() => {});
+        KBApi.getJson('/api/stats').then(s => { ctx.stats.value = s; }).catch(() => {});
+        if (ctx.featureEnabled('candidates')) {
+            ctx.loadCandidates().catch(() => {});
+            ctx.loadBatchImportStatus().then(job => {
+                if (job.running) ctx.startBatchImportPolling();
+            }).catch(() => {});
+        }
+        if (ctx.featureEnabled('wechat')) ctx.loadWechatSources().catch(() => {});
+        if (ctx.featureEnabled('rss')) ctx.loadRssFeeds().catch(() => {});
+        ctx.loadTranslationModels().catch(() => {});
+        if (ctx.featureEnabled('llm_settings')) {
+            ctx.loadLlmConfig().catch(() => {});
+            ctx.loadLlmBackups().catch(() => {});
+        }
+        if (ctx.featureEnabled('llm_audit')) {
+            ctx.loadLlmAudit().catch(() => {});
+            ctx.loadTranslationBackfillAudit().catch(() => {});
+        }
+    }
+
     function createToasts(ref) {
         const toasts = ref([]);
         let toastId = 0;
@@ -202,6 +228,7 @@
         formatBytes,
         formatDate,
         mergeTranslationPolicy,
+        mountApp,
         toggleTheme,
         translate
     };

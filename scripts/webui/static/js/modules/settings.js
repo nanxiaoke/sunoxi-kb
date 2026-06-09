@@ -365,11 +365,42 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            addLlmProvider: () => addLlmProvider(ctx),
+            syncProviderName: (provider) => syncProviderName(ctx, provider),
+            deleteLlmProvider: (provider) => deleteLlmProvider(ctx, provider),
+            availableProvidersForFlow: (flow) => availableProvidersForFlow(ctx, flow),
+            addProviderToFlow,
+            removeFlowProvider,
+            moveFlowProvider,
+            providerLabel: (name) => providerLabel(ctx, name),
+            providerTimeout: (name) => providerTimeout(ctx, name),
+            loadWebuiConfig: async () => loadWebuiConfig(ctx),
+            saveWebuiConfig: async () => saveWebuiConfig(ctx),
+            saveAllSettings: async () => saveAllSettings(ctx),
+            refreshAllSettings: async () => refreshAllSettings(ctx),
+            loadLlmConfig: async () => loadLlmConfig(ctx),
+            saveLlmConfig: async () => saveLlmConfig(ctx),
+            setLlmMode: async (mode) => setLlmMode(ctx, mode),
+            loadLlmBackups: async () => loadLlmBackups(ctx),
+            loadLlmAudit: async () => loadLlmAudit(ctx),
+            resetLlmAuditFilters: async () => resetLlmAuditFilters(ctx),
+            llmAuditExportUrl: (format) => llmAuditExportUrl(ctx, format),
+            exportLlmAudit: (format) => exportLlmAudit(ctx, format),
+            loadTranslationBackfillAudit: async () => loadTranslationBackfillAudit(ctx),
+            previewTranslationBackfillDryRun: async () => previewTranslationBackfillDryRun(ctx),
+            restoreLlmBackup: async (name) => restoreLlmBackup(ctx, name),
+            testLlmProvider: async (provider) => testLlmProvider(ctx, provider)
+        };
+    }
+
     global.KBSettings = {
         addLlmProvider,
         addProviderToFlow,
         applyLlmConfigPayload,
         availableProvidersForFlow,
+        createActions,
         deleteLlmProvider,
         exportLlmAudit,
         flowByName,

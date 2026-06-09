@@ -27,22 +27,6 @@ createApp({
         KBUI.bindLanguage(watch, uiLang);
         KBUI.bindDocumentTitle(watch, webuiApp);
 
-        const loadWebuiConfig = async () => {
-            await KBSettings.loadWebuiConfig(settingsContext);
-        };
-
-        const saveWebuiConfig = async () => {
-            await KBSettings.saveWebuiConfig(settingsContext);
-        };
-
-        const saveAllSettings = async () => {
-            await KBSettings.saveAllSettings(settingsContext);
-        };
-
-        const refreshAllSettings = async () => {
-            await KBSettings.refreshAllSettings(settingsContext);
-        };
-        
         const switchTab = (tab) => KBUI.switchTab(navigationContext, tab);
 
         // Theme
@@ -178,36 +162,32 @@ createApp({
             loadTranslationModels: (...args) => loadTranslationModels(...args)
         };
 
-        const addLlmProvider = () => {
-            KBSettings.addLlmProvider(settingsContext);
-        };
-
-        const syncProviderName = (provider) => {
-            KBSettings.syncProviderName(settingsContext, provider);
-        };
-
-        const deleteLlmProvider = (provider) => {
-            KBSettings.deleteLlmProvider(settingsContext, provider);
-        };
-
-        const availableProvidersForFlow = (flow) => {
-            return KBSettings.availableProvidersForFlow(settingsContext, flow);
-        };
-
-        const addProviderToFlow = (flow) => {
-            KBSettings.addProviderToFlow(flow);
-        };
-
-        const removeFlowProvider = (flow, idx) => {
-            KBSettings.removeFlowProvider(flow, idx);
-        };
-
-        const moveFlowProvider = (flow, idx, delta) => {
-            KBSettings.moveFlowProvider(flow, idx, delta);
-        };
-
-        const providerLabel = (name) => KBSettings.providerLabel(settingsContext, name);
-        const providerTimeout = (name) => KBSettings.providerTimeout(settingsContext, name);
+        const {
+            addLlmProvider,
+            syncProviderName,
+            deleteLlmProvider,
+            availableProvidersForFlow,
+            addProviderToFlow,
+            removeFlowProvider,
+            moveFlowProvider,
+            providerLabel,
+            providerTimeout,
+            loadWebuiConfig,
+            saveWebuiConfig,
+            saveAllSettings,
+            refreshAllSettings,
+            loadLlmConfig,
+            saveLlmConfig,
+            setLlmMode,
+            loadLlmBackups,
+            loadLlmAudit,
+            resetLlmAuditFilters,
+            exportLlmAudit,
+            loadTranslationBackfillAudit,
+            previewTranslationBackfillDryRun,
+            restoreLlmBackup,
+            testLlmProvider
+        } = KBSettings.createActions(settingsContext);
 
         let previewContext = null;
         const closePreview = () => {
@@ -239,54 +219,6 @@ createApp({
         };
 
         const retranslateDoc = async () => KBRetranslate.runRetranslate(retranslateContext);
-
-        const loadLlmConfig = async () => {
-            await KBSettings.loadLlmConfig(settingsContext);
-        };
-
-        const saveLlmConfig = async () => {
-            await KBSettings.saveLlmConfig(settingsContext);
-        };
-
-        const setLlmMode = async (mode) => {
-            await KBSettings.setLlmMode(settingsContext, mode);
-        };
-
-        const loadLlmBackups = async () => {
-            await KBSettings.loadLlmBackups(settingsContext);
-        };
-
-        const loadLlmAudit = async () => {
-            await KBSettings.loadLlmAudit(settingsContext);
-        };
-
-        const resetLlmAuditFilters = async () => {
-            await KBSettings.resetLlmAuditFilters(settingsContext);
-        };
-
-        const llmAuditExportUrl = (format) => {
-            return KBSettings.llmAuditExportUrl(settingsContext, format);
-        };
-
-        const exportLlmAudit = (format) => {
-            KBSettings.exportLlmAudit(settingsContext, format);
-        };
-
-        const loadTranslationBackfillAudit = async () => {
-            await KBSettings.loadTranslationBackfillAudit(settingsContext);
-        };
-
-        const previewTranslationBackfillDryRun = async () => {
-            await KBSettings.previewTranslationBackfillDryRun(settingsContext);
-        };
-
-        const restoreLlmBackup = async (name) => {
-            await KBSettings.restoreLlmBackup(settingsContext, name);
-        };
-
-        const testLlmProvider = async (provider) => {
-            await KBSettings.testLlmProvider(settingsContext, provider);
-        };
 
         // --- Document Management ---
         const docs = ref([]);

@@ -1877,3 +1877,27 @@ python3 scripts/processor.py --process-all
 ### 当前状态
 - app shell 的启动加载、resize 监听、语言/标题/主题/feature helper 都已进入 `ui.js`。
 - `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和图谱渲染。
+
+## 2026-06-09 - WebUI 重构第二十三阶段：聊天答案模式同步模块化
+
+### 目标
+继续清理 `app.js` 中的细碎 UI 状态同步逻辑。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/chat.js`：
+  - `KBChat.bindAnswerMode`
+- 聊天答案模式 `kb_chat_answer_mode` 的 localStorage 同步从 `app.js` 迁移到 `chat.js`。
+- `app.js` 保留 `KBChat.bindAnswerMode(watch, chatAnswerMode)` 薄调用。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/chat.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- 线上 `chat.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- 聊天请求和答案模式持久化都已进入 `chat.js`。
+- `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和图谱渲染。

@@ -11,6 +11,10 @@
         return submitChat(ctx);
     }
 
+    function bindAnswerMode(watch, chatAnswerMode) {
+        watch(chatAnswerMode, (v) => localStorage.setItem('kb_chat_answer_mode', v));
+    }
+
     async function submitChat(ctx) {
         const q = ctx.chatInput.value.trim();
         if (!q) return;
@@ -52,6 +56,7 @@
 
     global.KBChat = {
         ask,
+        bindAnswerMode,
         scrollToBottom,
         submitChat
     };

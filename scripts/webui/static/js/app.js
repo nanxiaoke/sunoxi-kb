@@ -95,7 +95,7 @@ createApp({
         const chatHistory = ref([]);
         const isWaiting = ref(false);
         const chatAnswerMode = ref(localStorage.getItem('kb_chat_answer_mode') || 'extractive');
-        watch(chatAnswerMode, (v) => localStorage.setItem('kb_chat_answer_mode', v));
+        KBChat.bindAnswerMode(watch, chatAnswerMode);
         const chatContext = {
             chatAnswerMode,
             chatHistory,

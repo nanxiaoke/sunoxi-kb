@@ -136,6 +136,33 @@
         }
     }
 
+    function switchTab(ctx, tab) {
+        const featureName = tab === 'docs' ? 'documents' : tab;
+        if (tab !== 'settings' && !ctx.featureEnabled(featureName)) {
+            ctx.showToast('该功能已在系统设置中关闭', 'warning');
+            return;
+        }
+        ctx.activeTab.value = tab;
+        ctx.mobileMenuOpen.value = false;
+        if (ctx.previewOpen.value) ctx.closePreview();
+        if (tab === 'graph') {
+            ctx.loadAssociations(false).catch(() => {});
+            ctx.nextTick(() => ctx.initGraph());
+        } else if (tab === 'docs') {
+            ctx.loadDocs();
+        } else if (tab === 'candidates') {
+            ctx.loadCandidates();
+        } else if (tab === 'wechat') {
+            ctx.loadWechatSources();
+        } else if (tab === 'rss') {
+            ctx.loadRssFeeds();
+        } else if (tab === 'settings') {
+            ctx.loadWebuiConfig();
+            ctx.loadLlmConfig();
+            ctx.loadLlmAudit();
+        }
+    }
+
     async function mountApp(ctx) {
         window.addEventListener('resize', () => {
             if (ctx.activeTab.value === 'graph' && ctx.hasGraph()) ctx.resizeGraph();
@@ -229,6 +256,7 @@
         formatDate,
         mergeTranslationPolicy,
         mountApp,
+        switchTab,
         toggleTheme,
         translate
     };

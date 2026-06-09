@@ -1916,3 +1916,28 @@ python3 scripts/processor.py --process-all
 - 独立设计 `graph.js` 的公开 API 和依赖注入方式。
 - 评估保留现有图谱、轻量模块化，或重做交互/渲染实现。
 - 单独补图谱相关 smoke/视觉验证，而不是混入主应用拆分提交。
+
+## 2026-06-09 - WebUI 重构第二十四阶段：导航切换 Glue 模块化
+
+### 目标
+继续在不触碰图谱实现的前提下，抽取 `app.js` 中低风险的全局 UI glue。
+
+### 本阶段完成
+- 扩展 `scripts/webui/static/js/modules/ui.js`：
+  - `KBUI.switchTab`
+- 菜单功能开关校验、移动菜单关闭、预览抽屉关闭、各 tab 首次加载分支从 `app.js` 迁移到 `ui.js`。
+- `app.js` 新增 `navigationContext`，保留模板使用的 `switchTab(tab)` 薄 wrapper。
+- 图谱 tab 仅通过 `loadAssociations` / `initGraph` 回调接入，图谱渲染代码未迁移。
+
+### 验证
+- `node --check scripts/webui/static/js/modules/ui.js` 通过。
+- `node --check scripts/webui/static/js/app.js` 通过。
+- `python3 -m py_compile scripts/web_ui.py scripts/smoke_webui_audit.py scripts/smoke_search_qa.py` 通过。
+- `python3 scripts/smoke_webui_audit.py` 通过。
+- `python3 scripts/smoke_search_qa.py --rebuild` 通过。
+- `systemctl --user restart karpathy-kb.service` 后 `/health` 返回 `ok`。
+- 线上 `ui.js` 静态路由返回 `text/javascript`。
+
+### 当前状态
+- App shell 的语言、标题、主题、feature、启动加载、resize 和 tab 切换 glue 已进入 `ui.js`。
+- `app.js` 剩余主要是状态/context 定义、跨模块薄 wrapper 和后续单独处理的图谱渲染。

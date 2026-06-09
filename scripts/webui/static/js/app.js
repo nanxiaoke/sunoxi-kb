@@ -46,32 +46,7 @@ createApp({
             if(featureEnabled('llm_audit')) await loadLlmAudit();
         };
         
-        // Switch Tab Logic
-        const switchTab = (tab) => {
-            if(tab !== 'settings' && !featureEnabled(tab === 'docs' ? 'documents' : tab)) {
-                showToast('该功能已在系统设置中关闭', 'warning');
-                return;
-            }
-            activeTab.value = tab;
-            mobileMenuOpen.value = false;
-            if(previewOpen.value) closePreview();
-            if(tab === 'graph') {
-                loadAssociations(false).catch(()=>{});
-                nextTick(() => initGraph());
-            } else if(tab === 'docs') {
-                loadDocs();
-            } else if(tab === 'candidates') {
-                loadCandidates();
-            } else if(tab === 'wechat') {
-                loadWechatSources();
-            } else if(tab === 'rss') {
-                loadRssFeeds();
-            } else if(tab === 'settings') {
-                loadWebuiConfig();
-                loadLlmConfig();
-                loadLlmAudit();
-            }
-        };
+        const switchTab = (tab) => KBUI.switchTab(navigationContext, tab);
 
         // Theme
         const toggleTheme = () => {
@@ -483,6 +458,24 @@ createApp({
             wechatSources,
             showToast,
             loadCandidates: (...args) => loadCandidates(...args)
+        };
+        const navigationContext = {
+            activeTab,
+            mobileMenuOpen,
+            previewOpen,
+            nextTick,
+            showToast,
+            featureEnabled,
+            closePreview: (...args) => closePreview(...args),
+            initGraph: (...args) => initGraph(...args),
+            loadAssociations: (...args) => loadAssociations(...args),
+            loadCandidates: (...args) => loadCandidates(...args),
+            loadDocs: (...args) => loadDocs(...args),
+            loadLlmAudit: (...args) => loadLlmAudit(...args),
+            loadLlmConfig: (...args) => loadLlmConfig(...args),
+            loadRssFeeds: (...args) => loadRssFeeds(...args),
+            loadWebuiConfig: (...args) => loadWebuiConfig(...args),
+            loadWechatSources: (...args) => loadWechatSources(...args)
         };
 
         const loadDocs = async () => {

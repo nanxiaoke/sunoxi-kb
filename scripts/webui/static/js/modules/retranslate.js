@@ -124,8 +124,16 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            loadTranslationModels: async () => loadTranslationModels(ctx),
+            retranslateDoc: async () => runRetranslate(ctx)
+        };
+    }
+
     global.KBRetranslate = {
         buildRetranslateAction,
+        createActions,
         loadTranslationModels,
         runRetranslate,
         selectedTranslationModel,

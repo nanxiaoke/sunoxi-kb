@@ -80,8 +80,24 @@
         }
     }
 
+    function resolveContext(ctx) {
+        return typeof ctx === 'function' ? ctx() : ctx;
+    }
+
+    function createActions(ctx) {
+        return {
+            closePreview: () => closePreview(resolveContext(ctx)),
+            previewDoc: async (path, options = {}) => previewDoc(resolveContext(ctx), path, options),
+            focusDocInList: async (path) => focusDocInList(resolveContext(ctx), path),
+            openAuditDoc: async (item) => openAuditDoc(resolveContext(ctx), item),
+            openDocAudit: async (path) => openDocAudit(resolveContext(ctx), path),
+            saveDocContent: async () => saveDocContent(resolveContext(ctx))
+        };
+    }
+
     global.KBPreview = {
         closePreview,
+        createActions,
         focusDocInList,
         openAuditDoc,
         openDocAudit,

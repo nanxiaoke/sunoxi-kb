@@ -60,11 +60,7 @@ createApp({
             nextTick,
             showToast
         };
-        const scrollToBottom = () => KBChat.scrollToBottom(chatContext);
-        const ask = (text) => KBChat.ask(chatContext, text);
-        const submitChat = async () => {
-            await KBChat.submitChat(chatContext);
-        };
+        const { scrollToBottom, ask, submitChat } = KBChat.createActions(chatContext);
         let graphContext = null;
         const initGraph = async () => {
             await KBGraph.initGraph(graphContext);
@@ -123,6 +119,7 @@ createApp({
             loadDocs: (...args) => loadDocs(...args)
         };
         const retranslateAction = computed(() => KBRetranslate.buildRetranslateAction(retranslateContext));
+        retranslateContext.retranslateAction = retranslateAction;
         const retranslateButtonTitle = computed(() => retranslateAction.value.title);
         const llmModeLabel = computed(() => KBSettings.llmModeLabel(llmModeOptions.value, llmMode.value));
         const llmModeDescription = computed(() => KBSettings.llmModeDescription(llmModeOptions.value, llmMode.value));
@@ -190,35 +187,14 @@ createApp({
         } = KBSettings.createActions(settingsContext);
 
         let previewContext = null;
-        const closePreview = () => {
-            KBPreview.closePreview(previewContext);
-        };
-
-        const previewDoc = async (path, options = {}) => {
-            await KBPreview.previewDoc(previewContext, path, options);
-        };
-
-        const focusDocInList = async (path) => {
-            await KBPreview.focusDocInList(previewContext, path);
-        };
-
-        const openAuditDoc = async (item) => {
-            await KBPreview.openAuditDoc(previewContext, item);
-        };
-
-        const openDocAudit = async (path) => {
-            await KBPreview.openDocAudit(previewContext, path);
-        };
-
-        const saveDocContent = async () => {
-            await KBPreview.saveDocContent(previewContext);
-        };
-
-        const loadTranslationModels = async () => {
-            await KBRetranslate.loadTranslationModels(translationModelContext);
-        };
-
-        const retranslateDoc = async () => KBRetranslate.runRetranslate(retranslateContext);
+        const {
+            closePreview,
+            previewDoc,
+            focusDocInList,
+            openAuditDoc,
+            openDocAudit,
+            saveDocContent
+        } = KBPreview.createActions(() => previewContext);
 
         // --- Document Management ---
         const docs = ref([]);
@@ -346,6 +322,10 @@ createApp({
             showToast,
             loadLlmAudit: (...args) => loadLlmAudit(...args)
         };
+        const {
+            loadTranslationModels,
+            retranslateDoc
+        } = KBRetranslate.createActions(retranslateContext);
         const maintenanceContext = {
             activeTab,
             associationReport,

@@ -54,9 +54,18 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            scrollToBottom: () => scrollToBottom(ctx),
+            ask: (text) => ask(ctx, text),
+            submitChat: async () => submitChat(ctx)
+        };
+    }
+
     global.KBChat = {
         ask,
         bindAnswerMode,
+        createActions,
         scrollToBottom,
         submitChat
     };

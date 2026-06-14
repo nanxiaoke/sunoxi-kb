@@ -237,8 +237,21 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            loadDocs: async () => loadDocs(ctx),
+            deleteDoc: async (path) => deleteDoc(ctx, path),
+            fetchUrl: async () => fetchUrl(ctx),
+            handleFileUpload: async (event) => handleFileUpload(ctx, event),
+            handleDrop: async (event) => handleDrop(ctx, event),
+            uploadFiles: async (files) => uploadFiles(ctx, files),
+            retryFailedImport: async (item) => retryFailedImport(ctx, item)
+        };
+    }
+
     global.KBDocuments = {
         buildFolderRows,
+        createActions,
         deleteDoc,
         filterDocs,
         fetchUrl,

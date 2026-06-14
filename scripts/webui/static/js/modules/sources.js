@@ -146,7 +146,21 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            loadRssFeeds: async () => loadRssFeeds(ctx),
+            saveRssFeed: async () => saveRssFeed(ctx),
+            deleteRssFeed: async (key) => deleteRssFeed(ctx, key),
+            toggleRssFeed: async (key) => toggleRssFeed(ctx, key),
+            syncRss: async (feedKey = null) => syncRss(ctx, feedKey),
+            loadWechatSources: async () => loadWechatSources(ctx),
+            saveWechatSource: async () => saveWechatSource(ctx),
+            discoverWechat: async (sourceName = null) => discoverWechat(ctx, sourceName)
+        };
+    }
+
     global.KBSources = {
+        createActions,
         defaultRssForm,
         defaultWechatSource,
         deleteRssFeed,

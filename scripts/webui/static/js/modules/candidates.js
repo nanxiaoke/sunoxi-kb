@@ -395,6 +395,28 @@
         ctx.showToast(`已按导入内容过滤文档：${q}`, 'info', 5000);
     }
 
+    function createActions(ctx) {
+        return {
+            loadCandidates: async () => loadCandidates(ctx),
+            previewCandidate: async (id) => previewCandidate(ctx, id),
+            translateCandidate: async (id, options = {}) => translateCandidate(ctx, id, options),
+            batchTranslatePreview: async () => batchTranslatePreview(ctx),
+            editCandidate: (item) => editCandidate(ctx, item),
+            closeCandidateEdit: () => closeCandidateEdit(ctx),
+            saveCandidateEdit: async () => saveCandidateEdit(ctx),
+            saveCandidateReviewInline: async () => saveCandidateReviewInline(ctx),
+            loadBatchImportStatus: async () => loadBatchImportStatus(ctx),
+            startBatchImportPolling: () => startBatchImportPolling(ctx),
+            batchImportA: async () => batchImportA(ctx),
+            batchSkipLowQuality: async () => batchSkipLowQuality(ctx),
+            importCandidate: async (id) => importCandidate(ctx, id),
+            skipCandidate: async (id) => skipCandidate(ctx, id),
+            restoreCandidate: async (id) => restoreCandidate(ctx, id),
+            openLastImportedDoc: async () => openLastImportedDoc(ctx),
+            searchLastImported: async () => searchLastImported(ctx)
+        };
+    }
+
     global.KBCandidates = {
         batchTranslatePreview,
         batchImportA,
@@ -402,6 +424,7 @@
         buildCandidatePreviewContent,
         buildCandidateGroups,
         closeCandidateEdit,
+        createActions,
         editCandidate,
         formatCandidateDate,
         importCandidate,

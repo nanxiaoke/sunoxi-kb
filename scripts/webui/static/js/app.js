@@ -419,9 +419,15 @@ createApp({
             switchTab
         };
 
-        const loadDocs = async () => {
-            await KBDocuments.loadDocs(documentsContext);
-        };
+        const {
+            loadDocs,
+            deleteDoc,
+            fetchUrl,
+            handleFileUpload,
+            handleDrop,
+            uploadFiles,
+            retryFailedImport
+        } = KBDocuments.createActions(documentsContext);
 
         const filteredDocs = computed(() => KBDocuments.filterDocs(docs.value, {
             query: docSearchText.value,
@@ -436,148 +442,46 @@ createApp({
         const docsTotalPages = computed(() => KBDocuments.totalPages(visibleDocs.value, docsPageSize.value));
         const pagedVisibleDocs = computed(() => KBDocuments.pageItems(visibleDocs.value, docsPage.value, docsPageSize.value));
 
-        const repairDocQuality = async (path) => {
-            await KBMaintenance.repairDocQuality(maintenanceContext, path);
-        };
+        const {
+            repairDocQuality,
+            repairAllQuality,
+            runMaintenance,
+            loadAssociations
+        } = KBMaintenance.createActions(maintenanceContext);
 
-        const repairAllQuality = async () => {
-            await KBMaintenance.repairAllQuality(maintenanceContext);
-        };
+        const {
+            loadRssFeeds,
+            saveRssFeed,
+            deleteRssFeed,
+            toggleRssFeed,
+            syncRss,
+            loadWechatSources,
+            saveWechatSource,
+            discoverWechat
+        } = KBSources.createActions(sourcesContext);
 
-        const loadRssFeeds = async () => {
-            await KBSources.loadRssFeeds(sourcesContext);
-        };
-
-        const saveRssFeed = async () => {
-            await KBSources.saveRssFeed(sourcesContext);
-        };
-
-        const deleteRssFeed = async (key) => {
-            await KBSources.deleteRssFeed(sourcesContext, key);
-        };
-
-        const toggleRssFeed = async (key) => {
-            await KBSources.toggleRssFeed(sourcesContext, key);
-        };
-
-        const syncRss = async (feedKey=null) => {
-            await KBSources.syncRss(sourcesContext, feedKey);
-        };
-
-        const loadWechatSources = async () => {
-            await KBSources.loadWechatSources(sourcesContext);
-        };
-
-        const saveWechatSource = async () => {
-            await KBSources.saveWechatSource(sourcesContext);
-        };
-
-        const discoverWechat = async (sourceName=null) => {
-            await KBSources.discoverWechat(sourcesContext, sourceName);
-        };
-
-        const loadCandidates = async () => {
-            await KBCandidates.loadCandidates(candidateContext);
-        };
-
-        const previewCandidate = async (id) => {
-            await KBCandidates.previewCandidate(candidateContext, id);
-        };
-
-        const translateCandidate = async (id, options={}) => {
-            await KBCandidates.translateCandidate(candidateContext, id, options);
-        };
-
-        const batchTranslatePreview = async () => {
-            await KBCandidates.batchTranslatePreview(candidateContext);
-        };
-
-        const editCandidate = (item) => {
-            KBCandidates.editCandidate(candidateContext, item);
-        };
-
-        const closeCandidateEdit = () => {
-            KBCandidates.closeCandidateEdit(candidateContext);
-        };
-
-        const saveCandidateEdit = async () => {
-            await KBCandidates.saveCandidateEdit(candidateContext);
-        };
-
-        const saveCandidateReviewInline = async () => {
-            await KBCandidates.saveCandidateReviewInline(candidateContext);
-        };
-
-        const loadBatchImportStatus = async () => {
-            return KBCandidates.loadBatchImportStatus(candidateContext);
-        };
-
-        const startBatchImportPolling = () => {
-            KBCandidates.startBatchImportPolling(candidateContext);
-        };
-
-        const batchImportA = async () => {
-            await KBCandidates.batchImportA(candidateContext);
-        };
-
-        const batchSkipLowQuality = async () => {
-            await KBCandidates.batchSkipLowQuality(candidateContext);
-        };
-
-        const importCandidate = async (id) => {
-            await KBCandidates.importCandidate(candidateContext, id);
-        };
-
-        const skipCandidate = async (id) => {
-            await KBCandidates.skipCandidate(candidateContext, id);
-        };
-
-        const restoreCandidate = async (id) => {
-            await KBCandidates.restoreCandidate(candidateContext, id);
-        };
-
-        const openLastImportedDoc = async () => {
-            await KBCandidates.openLastImportedDoc(candidateContext);
-        };
-
-        const searchLastImported = async () => {
-            await KBCandidates.searchLastImported(candidateContext);
-        };
-
-        const runMaintenance = async () => {
-            await KBMaintenance.runMaintenance(maintenanceContext);
-        };
-
-        const deleteDoc = async (path) => {
-            await KBDocuments.deleteDoc(documentsContext, path);
-        };
-
-        const fetchUrl = async () => {
-            await KBDocuments.fetchUrl(documentsContext);
-        };
-
-        const handleFileUpload = async (e) => {
-            await KBDocuments.handleFileUpload(documentsContext, e);
-        };
-        const handleDrop = async (e) => {
-            await KBDocuments.handleDrop(documentsContext, e);
-        };
-        const uploadFiles = async (files) => {
-            await KBDocuments.uploadFiles(documentsContext, files);
-        };
-
-        const retryFailedImport = async (item) => {
-            await KBDocuments.retryFailedImport(documentsContext, item);
-        };
+        const {
+            loadCandidates,
+            previewCandidate,
+            translateCandidate,
+            batchTranslatePreview,
+            editCandidate,
+            closeCandidateEdit,
+            saveCandidateEdit,
+            saveCandidateReviewInline,
+            loadBatchImportStatus,
+            startBatchImportPolling,
+            batchImportA,
+            batchSkipLowQuality,
+            importCandidate,
+            skipCandidate,
+            restoreCandidate,
+            openLastImportedDoc,
+            searchLastImported
+        } = KBCandidates.createActions(candidateContext);
 
         const formatBytes = KBUI.formatBytes;
         const formatDate = KBUI.formatDate;
-
-
-        const loadAssociations = async (rebuild=false) => {
-            await KBMaintenance.loadAssociations(maintenanceContext, rebuild);
-        };
-
         // Resize observer for graph
         onMounted(async () => {
             await KBUI.mountApp({

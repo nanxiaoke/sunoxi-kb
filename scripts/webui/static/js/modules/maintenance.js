@@ -79,7 +79,17 @@
         }
     }
 
+    function createActions(ctx) {
+        return {
+            repairDocQuality: async (path) => repairDocQuality(ctx, path),
+            repairAllQuality: async () => repairAllQuality(ctx),
+            runMaintenance: async () => runMaintenance(ctx),
+            loadAssociations: async (rebuild = false) => loadAssociations(ctx, rebuild)
+        };
+    }
+
     global.KBMaintenance = {
+        createActions,
         loadAssociations,
         repairAllQuality,
         repairDocQuality,

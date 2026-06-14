@@ -355,7 +355,18 @@
         return !!chartInstance;
     }
 
+    function resolveContext(ctx) {
+        return typeof ctx === 'function' ? ctx() : ctx;
+    }
+
+    function createActions(ctx) {
+        return {
+            initGraph: async () => initGraph(resolveContext(ctx))
+        };
+    }
+
     global.KBGraph = {
+        createActions,
         hasGraph,
         initGraph,
         resize

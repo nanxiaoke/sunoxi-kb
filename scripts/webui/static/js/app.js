@@ -27,17 +27,8 @@ createApp({
         KBUI.bindLanguage(watch, uiLang);
         KBUI.bindDocumentTitle(watch, webuiApp);
 
-        const switchTab = (tab) => KBUI.switchTab(navigationContext, tab);
-
-        // Theme
-        const toggleTheme = () => {
-            KBUI.toggleTheme({
-                theme,
-                activeTab,
-                hasGraph: () => KBGraph.hasGraph(),
-                initGraph
-            });
-        };
+        let navigationContext = null;
+        const { switchTab, toggleTheme } = KBUI.createActions(() => navigationContext);
         KBUI.applyTheme(theme.value);
 
         // --- Toasts ---
@@ -62,9 +53,7 @@ createApp({
         };
         const { scrollToBottom, ask, submitChat } = KBChat.createActions(chatContext);
         let graphContext = null;
-        const initGraph = async () => {
-            await KBGraph.initGraph(graphContext);
-        };
+        const { initGraph } = KBGraph.createActions(() => graphContext);
 
         // --- Document Preview Drawer ---
         const previewOpen = ref(false);
@@ -370,13 +359,15 @@ createApp({
             showToast,
             loadCandidates: (...args) => loadCandidates(...args)
         };
-        const navigationContext = {
+        navigationContext = {
             activeTab,
             mobileMenuOpen,
             previewOpen,
+            theme,
             nextTick,
             showToast,
             featureEnabled,
+            hasGraph: () => KBGraph.hasGraph(),
             closePreview: (...args) => closePreview(...args),
             initGraph: (...args) => initGraph(...args),
             loadAssociations: (...args) => loadAssociations(...args),

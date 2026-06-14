@@ -163,6 +163,17 @@
         }
     }
 
+    function resolveContext(ctx) {
+        return typeof ctx === 'function' ? ctx() : ctx;
+    }
+
+    function createActions(ctx) {
+        return {
+            switchTab: (tab) => switchTab(resolveContext(ctx), tab),
+            toggleTheme: () => toggleTheme(resolveContext(ctx))
+        };
+    }
+
     async function mountApp(ctx) {
         window.addEventListener('resize', () => {
             if (ctx.activeTab.value === 'graph' && ctx.hasGraph()) ctx.resizeGraph();
@@ -248,6 +259,7 @@
         applyTheme,
         bindDocumentTitle,
         bindLanguage,
+        createActions,
         createMarkdownRenderer,
         createToasts,
         defaultTranslationPolicy,
